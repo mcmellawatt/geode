@@ -26,9 +26,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.After;
 import org.junit.Before;
@@ -71,6 +75,7 @@ import org.apache.geode.internal.cache.tier.sockets.ClientProxyMembershipID;
 import org.apache.geode.internal.cache.tier.sockets.ClientUpdateMessage;
 import org.apache.geode.internal.cache.tier.sockets.ClientUpdateMessageImpl;
 import org.apache.geode.internal.cache.tier.sockets.HAEventWrapper;
+import org.apache.geode.internal.concurrent.ConcurrentHashSet;
 import org.apache.geode.internal.util.BlobHelper;
 import org.apache.geode.internal.util.concurrent.StoppableReentrantReadWriteLock;
 import org.apache.geode.test.junit.categories.IntegrationTest;
@@ -238,11 +243,90 @@ public class HARegionQueueIntegrationTest {
     verifyHAContainerWrapper(haContainerWrapper, cd, NUM_QUEUES);
   }
 
+  @Test
+  public void verifySimultaneousPutHAEventWrapperWithRegion() throws Exception {
+    HAContainerWrapper haContainerWrapper = createHAContainerRegion();
+
+    final int numQueues = 30;
+    final int numOperations = 10000;
+
+    Set<HAEventWrapper> haEventWrappersToValidate =
+        createAndPutHARegionQueuesSimulataneously(haContainerWrapper, numQueues, numOperations);
+
+    assertEquals(numOperations, haContainerWrapper.size());
+
+    for (HAEventWrapper haEventWrapperToValidate : haEventWrappersToValidate) {
+      HAEventWrapper wrapperInContainer =
+          (HAEventWrapper) haContainerWrapper.getKey(haEventWrapperToValidate);
+      assertEquals(numQueues, wrapperInContainer.getReferenceCount());
+    }
+  }
+
+  @Test
+  public void verifySequentialPutHAEventWrapperWithRegion() throws Exception {
+    HAContainerWrapper haContainerWrapper = createHAContainerRegion();
+
+    ClientUpdateMessage message = new ClientUpdateMessageImpl(EnumListenerEvent.AFTER_UPDATE,
+        (LocalRegion) dataRegion, "key", "value".getBytes(), (byte) 0x01, null,
+        new ClientProxyMembershipID(), new EventID(new byte[] {1}, 1, 2));
+    HAEventWrapper haEventWrapper = new HAEventWrapper(message);
+    haEventWrapper.setHAContainer(haContainerWrapper);
+
+    final int numQueues = 10;
+
+    createAndPutHARegionQueuesSequentially(haContainerWrapper, haEventWrapper, numQueues);
+
+    assertEquals(1, haContainerWrapper.size());
+
+    HAEventWrapper wrapperInContainer =
+        (HAEventWrapper) haContainerWrapper.getKey(haEventWrapper);
+    assertEquals(numQueues, wrapperInContainer.getReferenceCount());
+  }
+
+  @Test
+  public void verifySimultaneousPutHAEventWrapperWithMap() throws Exception {
+    HAContainerWrapper haContainerWrapper = new HAContainerMap(new ConcurrentHashMap());
+    when(ccn.getHaContainer()).thenReturn(haContainerWrapper);
+
+    final int numQueues = 30;
+    final int numOperations = 10000;
+
+    Set<HAEventWrapper> haEventWrappersToValidate =
+        createAndPutHARegionQueuesSimulataneously(haContainerWrapper, numQueues, numOperations);
+
+    assertEquals(numOperations, haContainerWrapper.size());
+
+    for (HAEventWrapper haEventWrapperToValidate : haEventWrappersToValidate) {
+      HAEventWrapper wrapperInContainer =
+          (HAEventWrapper) haContainerWrapper.getKey(haEventWrapperToValidate);
+      assertEquals(numQueues, wrapperInContainer.getReferenceCount());
+    }
+  }
+
+  @Test
+  public void verifySequentialPutHAEventWrapperWithMap() throws Exception {
+    HAContainerWrapper haContainerWrapper = new HAContainerMap(new ConcurrentHashMap());
+    when(ccn.getHaContainer()).thenReturn(haContainerWrapper);
+
+    ClientUpdateMessage message = new ClientUpdateMessageImpl(EnumListenerEvent.AFTER_UPDATE,
+        (LocalRegion) dataRegion, "key", "value".getBytes(), (byte) 0x01, null,
+        new ClientProxyMembershipID(), new EventID(new byte[] {1}, 1, 2));
+    HAEventWrapper haEventWrapper = new HAEventWrapper(message);
+    haEventWrapper.setHAContainer(haContainerWrapper);
+
+    final int numQueues = 10;
+    createAndPutHARegionQueuesSequentially(haContainerWrapper, haEventWrapper, numQueues);
+
+    assertEquals(1, haContainerWrapper.size());
+
+    HAEventWrapper wrapperInContainer =
+        (HAEventWrapper) haContainerWrapper.getKey(haEventWrapper);
+    assertEquals(numQueues, wrapperInContainer.getReferenceCount());
+  }
+
   private HAContainerRegion createHAContainerRegion() throws Exception {
-    // Create a Region to be used by the HAContainerRegion
     Region haContainerRegionRegion = createHAContainerRegionRegion();
 
-    // Create an HAContainerRegion
     HAContainerRegion haContainerRegion = new HAContainerRegion(haContainerRegionRegion);
 
     return haContainerRegion;
@@ -333,6 +417,57 @@ public class HARegionQueueIntegrationTest {
       haRegionQueue.put(wrapper);
     }
     return targetQueue;
+  }
+
+  private Set<HAEventWrapper> createAndPutHARegionQueuesSimulataneously(
+      HAContainerWrapper haContainerWrapper, int numQueues, int numOperations) throws Exception {
+    ConcurrentLinkedQueue<HARegionQueue> queues = new ConcurrentLinkedQueue<>();
+    final ConcurrentHashSet<HAEventWrapper> testValidationWrapperSet = new ConcurrentHashSet<>();
+    final AtomicInteger count = new AtomicInteger();
+
+    // create HARegionQueuesv
+    for (int i = 0; i < numQueues; i++) {
+      queues.add(createHARegionQueue(haContainerWrapper, i));
+    }
+
+    for (int i = 0; i < numOperations; i++) {
+      count.set(i);
+
+      queues.parallelStream().forEach(haRegionQueue -> {
+        try {
+          // In production, each queue has its own HAEventWrapper object even though they hold the
+          // same ClientUpdateMessage,
+          // so we create an object for each queue in here
+          ClientUpdateMessage message = new ClientUpdateMessageImpl(EnumListenerEvent.AFTER_CREATE,
+              (LocalRegion) dataRegion, "key", "value".getBytes(), (byte) 0x01, null,
+              new ClientProxyMembershipID(), new EventID(new byte[] {1}, 1, count.get()));
+
+          HAEventWrapper haEventWrapper = new HAEventWrapper(message);
+
+          testValidationWrapperSet.add(haEventWrapper);
+
+          haRegionQueue.put(haEventWrapper);
+        } catch (InterruptedException iex) {
+          throw new RuntimeException(iex);
+        }
+      });
+    }
+
+    return testValidationWrapperSet;
+  }
+
+  private void createAndPutHARegionQueuesSequentially(HAContainerWrapper haContainerWrapper,
+      HAEventWrapper haEventWrapper, int numQueues) throws Exception {
+    ArrayList<HARegionQueue> queues = new ArrayList<>();
+
+    // create HARegionQueues
+    for (int i = 0; i < numQueues; i++) {
+      queues.add(createHARegionQueue(haContainerWrapper, i));
+    }
+
+    for (HARegionQueue queue : queues) {
+      queue.put(haEventWrapper);
+    }
   }
 
   private void createAndUpdateHARegionQueuesSimultaneously(HAContainerWrapper haContainerWrapper,
