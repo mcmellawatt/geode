@@ -14,6 +14,7 @@
  */
 package org.apache.geode.internal.cache.ha;
 
+import static io.codearte.catchexception.shade.mockito.Mockito.times;
 import static org.apache.geode.distributed.ConfigurationProperties.MCAST_PORT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
@@ -21,11 +22,10 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Queue;
@@ -34,6 +34,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.sun.tools.corba.se.idl.constExpr.Times;
+import org.apache.geode.internal.cache.tier.sockets.*;
+import org.apache.geode.internal.cache.versions.VersionTag;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -70,11 +73,6 @@ import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.internal.cache.InternalRegionArguments;
 import org.apache.geode.internal.cache.LocalRegion;
 import org.apache.geode.internal.cache.VMCachedDeserializable;
-import org.apache.geode.internal.cache.tier.sockets.CacheClientNotifier;
-import org.apache.geode.internal.cache.tier.sockets.ClientProxyMembershipID;
-import org.apache.geode.internal.cache.tier.sockets.ClientUpdateMessage;
-import org.apache.geode.internal.cache.tier.sockets.ClientUpdateMessageImpl;
-import org.apache.geode.internal.cache.tier.sockets.HAEventWrapper;
 import org.apache.geode.internal.concurrent.ConcurrentHashSet;
 import org.apache.geode.internal.util.BlobHelper;
 import org.apache.geode.internal.util.concurrent.StoppableReentrantReadWriteLock;
@@ -324,6 +322,26 @@ public class HARegionQueueIntegrationTest {
     assertEquals(numQueues, wrapperInContainer.getReferenceCount());
   }
 
+  @Test
+  public void verifySimultaneousPutAndDeleteHAEventWrapperWithMap() throws Exception {
+    HAContainerWrapper haContainerWrapper = new HAContainerMap(new ConcurrentHashMap());
+    when(ccn.getHaContainer()).thenReturn(haContainerWrapper);
+
+    final int numQueues = 30;
+    final int numOperations = 10000;
+
+    Set<HAEventWrapper> haEventWrappersToValidate =
+            createAndPutHARegionQueuesSimulataneously(haContainerWrapper, numQueues, numOperations);
+
+    assertEquals(numOperations, haContainerWrapper.size());
+
+    for (HAEventWrapper haEventWrapperToValidate : haEventWrappersToValidate) {
+      HAEventWrapper wrapperInContainer =
+              (HAEventWrapper) haContainerWrapper.getKey(haEventWrapperToValidate);
+      assertEquals(numQueues, wrapperInContainer.getReferenceCount());
+    }
+  }
+
   private HAContainerRegion createHAContainerRegion() throws Exception {
     Region haContainerRegionRegion = createHAContainerRegionRegion();
 
@@ -456,6 +474,42 @@ public class HARegionQueueIntegrationTest {
     return testValidationWrapperSet;
   }
 
+  private Set<HAEventWrapper> createAndPutAndDeleteHARegionQueuesSimulataneously(
+          HAContainerWrapper haContainerWrapper, int numQueues, int numOperations) throws Exception {
+    ConcurrentLinkedQueue<HARegionQueue> queues = new ConcurrentLinkedQueue<>();
+    final ConcurrentHashSet<HAEventWrapper> testValidationWrapperSet = new ConcurrentHashSet<>();
+    final AtomicInteger count = new AtomicInteger();
+
+    // create HARegionQueues
+    for (int i = 0; i < numQueues; i++) {
+      queues.add(createHARegionQueue(haContainerWrapper, i));
+    }
+
+    for (int i = 0; i < numOperations; i++) {
+      count.set(i);
+
+      queues.parallelStream().forEach(haRegionQueue -> {
+        try {
+          // In production, each queue has its own HAEventWrapper object even though they hold the
+          // same ClientUpdateMessage, so we create an object for each queue in here
+          MockClientMessage message = new MockClientMessage(EnumListenerEvent.AFTER_CREATE,
+                  (LocalRegion) dataRegion, "key", "value".getBytes(), (byte) 0x01, null,
+                  new ClientProxyMembershipID(), new EventID(new byte[] {1}, 1, count.get()));
+
+          HAEventWrapper haEventWrapper = new HAEventWrapper(message);
+
+          testValidationWrapperSet.add(haEventWrapper);
+
+          haRegionQueue.put(haEventWrapper);
+        } catch (Exception ex) {
+          throw new RuntimeException(ex);
+        }
+      });
+    }
+
+    return testValidationWrapperSet;
+  }
+
   private void createAndPutHARegionQueuesSequentially(HAContainerWrapper haContainerWrapper,
       HAEventWrapper haEventWrapper, int numQueues) throws Exception {
     ArrayList<HARegionQueue> queues = new ArrayList<>();
@@ -508,5 +562,24 @@ public class HARegionQueueIntegrationTest {
     HAEventWrapper wrapperInContainer =
         (HAEventWrapper) haContainerWrapper.getKey(cd.getDeserializedForReading());
     assertThat(wrapperInContainer.getReferenceCount()).isEqualTo(numQueues);
+  }
+
+  private class MockClientMessage extends ClientUpdateMessageImpl {
+    Message mockMessage;
+
+    public MockClientMessage(EnumListenerEvent operation, LocalRegion region, Object keyOfInterest, Object value, byte valueIsObject, Object callbackArgument, ClientProxyMembershipID memberId, EventID eventIdentifier) {
+      super(operation, region, keyOfInterest, value, valueIsObject, callbackArgument, memberId, eventIdentifier);
+    }
+
+    @Override
+    protected Message getMessage(CacheClientProxy proxy, byte[] latestValue) throws IOException {
+      mockMessage = Mockito.mock(Message.class);
+      doNothing().when(mockMessage).send();
+      return mockMessage;
+    }
+
+    public void verifySent() throws Exception {
+      verify(mockMessage, Mockito.times(1)).send();
+    }
   }
 }
