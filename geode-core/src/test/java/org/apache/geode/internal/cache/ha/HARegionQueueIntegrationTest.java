@@ -14,7 +14,6 @@
  */
 package org.apache.geode.internal.cache.ha;
 
-import static io.codearte.catchexception.shade.mockito.Mockito.times;
 import static org.apache.geode.distributed.ConfigurationProperties.MCAST_PORT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
@@ -22,7 +21,11 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mock;
 
 import java.io.IOException;
@@ -34,9 +37,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.sun.tools.corba.se.idl.constExpr.Times;
-import org.apache.geode.internal.cache.tier.sockets.*;
-import org.apache.geode.internal.cache.versions.VersionTag;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -73,6 +73,13 @@ import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.internal.cache.InternalRegionArguments;
 import org.apache.geode.internal.cache.LocalRegion;
 import org.apache.geode.internal.cache.VMCachedDeserializable;
+import org.apache.geode.internal.cache.tier.sockets.CacheClientNotifier;
+import org.apache.geode.internal.cache.tier.sockets.CacheClientProxy;
+import org.apache.geode.internal.cache.tier.sockets.ClientProxyMembershipID;
+import org.apache.geode.internal.cache.tier.sockets.ClientUpdateMessage;
+import org.apache.geode.internal.cache.tier.sockets.ClientUpdateMessageImpl;
+import org.apache.geode.internal.cache.tier.sockets.HAEventWrapper;
+import org.apache.geode.internal.cache.tier.sockets.Message;
 import org.apache.geode.internal.concurrent.ConcurrentHashSet;
 import org.apache.geode.internal.util.BlobHelper;
 import org.apache.geode.internal.util.concurrent.StoppableReentrantReadWriteLock;
@@ -322,6 +329,33 @@ public class HARegionQueueIntegrationTest {
     assertEquals(numQueues, wrapperInContainer.getReferenceCount());
   }
 
+  @Test
+  public void putGIIdEventsInQueue() throws Exception {
+    // Create a HAContainerMap to be used by the CacheClientNotifier
+    HAContainerWrapper haContainerWrapper = new HAContainerMap(new ConcurrentHashMap());
+    when(ccn.getHaContainer()).thenReturn(haContainerWrapper);
+
+    HARegion haRegion = Mockito.mock(HARegion.class);
+    when(haRegion.getGemFireCache()).thenReturn((InternalCache) cache);
+
+    // create message and HAEventWrapper
+    ClientUpdateMessage message = new ClientUpdateMessageImpl(EnumListenerEvent.AFTER_UPDATE,
+        (LocalRegion) dataRegion, "key", "value".getBytes(), (byte) 0x01, null,
+        new ClientProxyMembershipID(), new EventID(cache.getDistributedSystem()));
+    HAEventWrapper wrapper = new HAEventWrapper(message);
+    wrapper.setHAContainer(haContainerWrapper);
+
+    ConcurrentHashMap<Integer, HAEventWrapper> mockEntries = new ConcurrentHashMap<>();
+
+    mockEntries.put(0, wrapper);
+
+    when(haRegion.entrySet(false)).thenReturn(mockEntries.entrySet());
+
+    for (int i = 0; i < 10; ++i) {
+      HARegionQueue regionQueue = createHARegionQueue(haContainerWrapper, i, haRegion, true);
+    }
+  }
+
   private HAContainerRegion createHAContainerRegion() throws Exception {
     Region haContainerRegionRegion = createHAContainerRegionRegion();
 
@@ -346,25 +380,30 @@ public class HARegionQueueIntegrationTest {
     return region;
   }
 
-  private HARegionQueue createHARegionQueue(Map haContainer, int index) throws Exception {
+  private HARegionQueue createHARegionQueue(Map haContainer, int index, HARegion haRegion,
+      boolean puttingGIIDataInQueue) throws Exception {
     StoppableReentrantReadWriteLock giiLock = Mockito.mock(StoppableReentrantReadWriteLock.class);
-    when(giiLock.writeLock())
-        .thenReturn(Mockito.mock(StoppableReentrantReadWriteLock.StoppableWriteLock.class));
-    when(giiLock.readLock())
-        .thenReturn(Mockito.mock(StoppableReentrantReadWriteLock.StoppableReadLock.class));
+    doReturn(Mockito.mock(StoppableReentrantReadWriteLock.StoppableWriteLock.class)).when(giiLock)
+        .writeLock();
+    doReturn(Mockito.mock(StoppableReentrantReadWriteLock.StoppableReadLock.class)).when(giiLock)
+        .readLock();
 
     StoppableReentrantReadWriteLock rwLock = Mockito.mock(StoppableReentrantReadWriteLock.class);
-    when(rwLock.writeLock())
-        .thenReturn(Mockito.mock(StoppableReentrantReadWriteLock.StoppableWriteLock.class));
-    when(rwLock.readLock())
-        .thenReturn(Mockito.mock(StoppableReentrantReadWriteLock.StoppableReadLock.class));
-
-    HARegion haRegion = Mockito.mock(HARegion.class);
-    when(haRegion.getGemFireCache()).thenReturn((InternalCache) cache);
+    doReturn(Mockito.mock(StoppableReentrantReadWriteLock.StoppableWriteLock.class)).when(rwLock)
+        .writeLock();
+    doReturn(Mockito.mock(StoppableReentrantReadWriteLock.StoppableReadLock.class)).when(rwLock)
+        .readLock();
 
     return new HARegionQueue("haRegion+" + index, haRegion, (InternalCache) cache, haContainer,
         null, (byte) 1, true, mock(HARegionQueueStats.class), giiLock, rwLock,
-        mock(CancelCriterion.class), false);
+        mock(CancelCriterion.class), puttingGIIDataInQueue);
+  }
+
+  private HARegionQueue createHARegionQueue(Map haContainer, int index) throws Exception {
+    HARegion haRegion = Mockito.mock(HARegion.class);
+    when(haRegion.getGemFireCache()).thenReturn((InternalCache) cache);
+
+    return createHARegionQueue(haContainer, index, haRegion, false);
   }
 
   private CachedDeserializable createCachedDeserializable(HAContainerWrapper haContainerWrapper)
@@ -511,8 +550,11 @@ public class HARegionQueueIntegrationTest {
   private class MockClientMessage extends ClientUpdateMessageImpl {
     Message mockMessage;
 
-    public MockClientMessage(EnumListenerEvent operation, LocalRegion region, Object keyOfInterest, Object value, byte valueIsObject, Object callbackArgument, ClientProxyMembershipID memberId, EventID eventIdentifier) {
-      super(operation, region, keyOfInterest, value, valueIsObject, callbackArgument, memberId, eventIdentifier);
+    public MockClientMessage(EnumListenerEvent operation, LocalRegion region, Object keyOfInterest,
+        Object value, byte valueIsObject, Object callbackArgument, ClientProxyMembershipID memberId,
+        EventID eventIdentifier) {
+      super(operation, region, keyOfInterest, value, valueIsObject, callbackArgument, memberId,
+          eventIdentifier);
     }
 
     @Override
