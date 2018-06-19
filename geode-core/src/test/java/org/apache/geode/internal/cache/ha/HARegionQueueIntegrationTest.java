@@ -322,26 +322,6 @@ public class HARegionQueueIntegrationTest {
     assertEquals(numQueues, wrapperInContainer.getReferenceCount());
   }
 
-  @Test
-  public void verifySimultaneousPutAndDeleteHAEventWrapperWithMap() throws Exception {
-    HAContainerWrapper haContainerWrapper = new HAContainerMap(new ConcurrentHashMap());
-    when(ccn.getHaContainer()).thenReturn(haContainerWrapper);
-
-    final int numQueues = 30;
-    final int numOperations = 10000;
-
-    Set<HAEventWrapper> haEventWrappersToValidate =
-            createAndPutHARegionQueuesSimulataneously(haContainerWrapper, numQueues, numOperations);
-
-    assertEquals(numOperations, haContainerWrapper.size());
-
-    for (HAEventWrapper haEventWrapperToValidate : haEventWrappersToValidate) {
-      HAEventWrapper wrapperInContainer =
-              (HAEventWrapper) haContainerWrapper.getKey(haEventWrapperToValidate);
-      assertEquals(numQueues, wrapperInContainer.getReferenceCount());
-    }
-  }
-
   private HAContainerRegion createHAContainerRegion() throws Exception {
     Region haContainerRegionRegion = createHAContainerRegionRegion();
 
@@ -467,42 +447,6 @@ public class HARegionQueueIntegrationTest {
           haRegionQueue.put(haEventWrapper);
         } catch (InterruptedException iex) {
           throw new RuntimeException(iex);
-        }
-      });
-    }
-
-    return testValidationWrapperSet;
-  }
-
-  private Set<HAEventWrapper> createAndPutAndDeleteHARegionQueuesSimulataneously(
-          HAContainerWrapper haContainerWrapper, int numQueues, int numOperations) throws Exception {
-    ConcurrentLinkedQueue<HARegionQueue> queues = new ConcurrentLinkedQueue<>();
-    final ConcurrentHashSet<HAEventWrapper> testValidationWrapperSet = new ConcurrentHashSet<>();
-    final AtomicInteger count = new AtomicInteger();
-
-    // create HARegionQueues
-    for (int i = 0; i < numQueues; i++) {
-      queues.add(createHARegionQueue(haContainerWrapper, i));
-    }
-
-    for (int i = 0; i < numOperations; i++) {
-      count.set(i);
-
-      queues.parallelStream().forEach(haRegionQueue -> {
-        try {
-          // In production, each queue has its own HAEventWrapper object even though they hold the
-          // same ClientUpdateMessage, so we create an object for each queue in here
-          MockClientMessage message = new MockClientMessage(EnumListenerEvent.AFTER_CREATE,
-                  (LocalRegion) dataRegion, "key", "value".getBytes(), (byte) 0x01, null,
-                  new ClientProxyMembershipID(), new EventID(new byte[] {1}, 1, count.get()));
-
-          HAEventWrapper haEventWrapper = new HAEventWrapper(message);
-
-          testValidationWrapperSet.add(haEventWrapper);
-
-          haRegionQueue.put(haEventWrapper);
-        } catch (Exception ex) {
-          throw new RuntimeException(ex);
         }
       });
     }
