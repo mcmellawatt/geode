@@ -21,6 +21,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
@@ -30,11 +31,17 @@ import static org.powermock.api.mockito.PowerMockito.mock;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.After;
@@ -49,8 +56,10 @@ import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
+import util.TestException;
 
 import org.apache.geode.CancelCriterion;
+import org.apache.geode.CancelException;
 import org.apache.geode.cache.AttributesFactory;
 import org.apache.geode.cache.Cache;
 import org.apache.geode.cache.CacheFactory;
@@ -356,6 +365,92 @@ public class HARegionQueueIntegrationTest {
     }
   }
 
+  @Test
+  public void queueRemovalAndDispatchingConcurrently() throws Exception {
+    // Create a HAContainerMap to be used by the CacheClientNotifier
+    HAContainerWrapper haContainerWrapper = new HAContainerMap(new ConcurrentHashMap());
+    when(ccn.getHaContainer()).thenReturn(haContainerWrapper);
+
+    List<HARegionQueue> regionQueues = new ArrayList<>();
+
+    for (int i = 0; i < 2; ++i) {
+      HARegion haRegion = Mockito.mock(HARegion.class);
+      when(haRegion.getGemFireCache()).thenReturn((InternalCache) cache);
+
+      ConcurrentHashMap<Object, Object> mockRegion = new ConcurrentHashMap<>();
+
+      when(haRegion.put(Mockito.any(Object.class), Mockito.any(Object.class))).then(answer -> {
+        Object existingValue = mockRegion.putIfAbsent(answer.getArgument(0), answer.getArgument(1));
+        return existingValue;
+      });
+
+      when(haRegion.get(Mockito.any(Object.class))).then(answer -> {
+        return mockRegion.get(answer.getArgument(0));
+      });
+
+      doAnswer(answer -> {
+        mockRegion.remove(answer.getArgument(0));
+        return null;
+      }).when(haRegion).localDestroy(Mockito.any(Object.class));
+
+      regionQueues.add(createHARegionQueue(haContainerWrapper, i, haRegion, false));
+    }
+
+    ExecutorService service = Executors.newFixedThreadPool(2);
+
+    List<Callable<Object>> callables = new ArrayList<>();
+
+    for (int i = 0; i < 100000; ++i) {
+      callables.clear();
+
+      EventID eventID = new EventID(new byte[] {1}, 1, i);
+
+      ClientUpdateMessage message = new ClientUpdateMessageImpl(EnumListenerEvent.AFTER_UPDATE,
+          (LocalRegion) dataRegion, "key", "value".getBytes(), (byte) 0x01, null,
+          new ClientProxyMembershipID(), eventID);
+
+      HAEventWrapper wrapper = new HAEventWrapper(message);
+      wrapper.setHAContainer(haContainerWrapper);
+
+      for (HARegionQueue queue : regionQueues) {
+        queue.put(wrapper);
+      }
+
+      for (HARegionQueue queue : regionQueues) {
+        callables.add(Executors.callable(() -> {
+          try {
+            queue.peek();
+            queue.remove();
+          } catch (Exception ex) {
+            throw new RuntimeException(ex);
+          }
+        }));
+
+        callables.add(Executors.callable(() -> {
+          try {
+            queue.removeDispatchedEvents(eventID);
+          } catch (Exception ex) {
+            throw new RuntimeException(ex);
+          }
+        }));
+      }
+
+      // invokeAll() will wait until our two callables have completed
+      List<Future<Object>> futures = service.invokeAll(callables, 10, TimeUnit.SECONDS);
+
+      for (Future<Object> future : futures) {
+        try {
+          future.get();
+        } catch (Exception ex) {
+          throw new TestException(
+              "Exception thrown while executing regionQueue methods concurrently on iteration: "
+                  + i,
+              ex);
+        }
+      }
+    }
+  }
+
   private HAContainerRegion createHAContainerRegion() throws Exception {
     Region haContainerRegionRegion = createHAContainerRegionRegion();
 
@@ -388,11 +483,8 @@ public class HARegionQueueIntegrationTest {
     doReturn(Mockito.mock(StoppableReentrantReadWriteLock.StoppableReadLock.class)).when(giiLock)
         .readLock();
 
-    StoppableReentrantReadWriteLock rwLock = Mockito.mock(StoppableReentrantReadWriteLock.class);
-    doReturn(Mockito.mock(StoppableReentrantReadWriteLock.StoppableWriteLock.class)).when(rwLock)
-        .writeLock();
-    doReturn(Mockito.mock(StoppableReentrantReadWriteLock.StoppableReadLock.class)).when(rwLock)
-        .readLock();
+    StoppableReentrantReadWriteLock rwLock =
+        new StoppableReentrantReadWriteLock(cache.getCancelCriterion());
 
     return new HARegionQueue("haRegion+" + index, haRegion, (InternalCache) cache, haContainer,
         null, (byte) 1, true, mock(HARegionQueueStats.class), giiLock, rwLock,
