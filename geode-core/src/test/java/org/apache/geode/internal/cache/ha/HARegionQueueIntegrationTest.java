@@ -380,7 +380,7 @@ public class HARegionQueueIntegrationTest {
       ConcurrentHashMap<Object, Object> mockRegion = new ConcurrentHashMap<>();
 
       when(haRegion.put(Mockito.any(Object.class), Mockito.any(Object.class))).then(answer -> {
-        Object existingValue = mockRegion.putIfAbsent(answer.getArgument(0), answer.getArgument(1));
+        Object existingValue = mockRegion.put(answer.getArgument(0), answer.getArgument(1));
         return existingValue;
       });
 
