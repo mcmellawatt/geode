@@ -17,9 +17,11 @@ package org.apache.geode.cache;
 import java.io.File;
 import java.util.Properties;
 
+import org.apache.geode.api.AsyncRegion;
 import org.apache.geode.cache.client.PoolManager;
 import org.apache.geode.compression.Compressor;
 import org.apache.geode.distributed.LeaseExpiredException;
+import org.apache.geode.internal.api.AsyncRegionImpl;
 import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.internal.cache.InternalRegion;
 import org.apache.geode.internal.i18n.LocalizedStrings;
@@ -754,6 +756,13 @@ public class RegionFactory<K, V> {
     @SuppressWarnings("deprecation")
     RegionAttributes<K, V> ra = this.attrsFactory.create();
     return getCache().createRegion(name, ra);
+  }
+
+  public AsyncRegion<K, V> createAsync(String name)
+      throws CacheExistsException, RegionExistsException, CacheWriterException, TimeoutException {
+    @SuppressWarnings("deprecation")
+    RegionAttributes<K, V> ra = this.attrsFactory.create();
+    return new AsyncRegionImpl<>(getCache().createRegion(name, ra));
   }
 
   /**

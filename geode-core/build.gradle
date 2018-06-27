@@ -132,6 +132,7 @@ dependencies {
   compile 'com.healthmarketscience.rmiio:rmiio:' + project.'rmiio.version'
 
   compile project(':geode-common')
+  compile project(':geode-public-api')
   compile project(':geode-json')
 
   jcaCompile sourceSets.main.output
