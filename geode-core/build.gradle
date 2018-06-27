@@ -134,6 +134,7 @@ dependencies {
   compile project(':geode-common')
   compile project(':geode-public-api')
   compile project(':geode-json')
+  testCompile project(':geode-public-api')
 
   jcaCompile sourceSets.main.output
 
