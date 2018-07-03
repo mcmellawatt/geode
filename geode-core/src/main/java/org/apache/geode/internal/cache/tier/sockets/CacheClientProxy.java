@@ -1544,6 +1544,7 @@ public class CacheClientProxy implements ClientSession {
   protected void deliverMessage(Conflatable conflatable) {
     ThreadState state = this.securityService.bindSubject(this.subject);
     ClientUpdateMessage clientMessage = null;
+
     if (conflatable instanceof HAEventWrapper) {
       clientMessage = ((HAEventWrapper) conflatable).getClientUpdateMessage();
     } else {
@@ -1710,8 +1711,6 @@ public class CacheClientProxy implements ClientSession {
         if (nextEvent instanceof HAEventWrapper) {
           synchronized (nextEvent) {
             if (((HAEventWrapper) nextEvent).getIsRefFromHAContainer()) {
-              logger.info("RYGUY: Queued Events Post Processing for HAEventWrapper: "
-                  + nextEvent.hashCode());
               ((HAEventWrapper) nextEvent).setClientUpdateMessage(null);
               ((HAEventWrapper) nextEvent).setPutInProgress(false);
             }
@@ -1734,8 +1733,6 @@ public class CacheClientProxy implements ClientSession {
           if (nextEvent instanceof HAEventWrapper) {
             synchronized (nextEvent) {
               if (((HAEventWrapper) nextEvent).getIsRefFromHAContainer()) {
-                logger.info("RYGUY: Queued Events Post Processing for HAEventWrapper: "
-                    + nextEvent.hashCode());
                 ((HAEventWrapper) nextEvent).setClientUpdateMessage(null);
                 ((HAEventWrapper) nextEvent).setPutInProgress(false);
               }
