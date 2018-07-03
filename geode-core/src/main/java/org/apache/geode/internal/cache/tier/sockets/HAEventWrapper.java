@@ -48,7 +48,7 @@ import org.apache.geode.internal.size.Sizeable;
  * @since GemFire 5.7
  *
  */
-public class HAEventWrapper implements Conflatable, DataSerializableFixedID, Sizeable {
+public class HAEventWrapper implements Conflatable, DataSerializableFixedID, Sizeable, Cloneable {
   private static final long serialVersionUID = 5874226899495609988L;
   private static final Logger logger = LogService.getLogger();
 
@@ -411,4 +411,13 @@ public class HAEventWrapper implements Conflatable, DataSerializableFixedID, Siz
     return rcUpdater.decrementAndGet(this);
   }
 
+  @Override
+  public Object clone() {
+    try {
+      return super.clone();
+    } catch (CloneNotSupportedException cnsex) {
+      // HAEventWrapper implements Cloneable so this exception type will not be thrown
+      return null;
+    }
+  }
 }

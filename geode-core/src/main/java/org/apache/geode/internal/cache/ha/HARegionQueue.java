@@ -1389,7 +1389,13 @@ public class HARegionQueue implements RegionQueue {
           }
           this.storePeekedID(next);
           break;
+        } else {
+          logger.info(
+              "RYGUY: Not a java.lang.NullPointerException, but encountered null for Position: "
+                  + next + "; Event ID: " + this.region.get(next).hashCode() + "; Region: "
+                  + this.regionName);
         }
+
       }
     }
     // since size is zero, return null
@@ -3431,6 +3437,7 @@ public class HARegionQueue implements RegionQueue {
   protected void putEventInHARegion(Conflatable event, Long position) {
     if (event instanceof HAEventWrapper) {
       HAEventWrapper inputHaEventWrapper = (HAEventWrapper) event;
+
       if (this.isQueueInitialized()) {
         if (inputHaEventWrapper.getIsRefFromHAContainer()) {
           putEntryConditionallyIntoHAContainer(inputHaEventWrapper);
@@ -3462,6 +3469,9 @@ public class HARegionQueue implements RegionQueue {
               }
             } else {
               synchronized (inputHaEventWrapper) {
+                if (inputHaEventWrapper.getClientUpdateMessage() == null) {
+                  logger.info("RYGUY: Other incoming null update message", new Exception());
+                }
                 inputHaEventWrapper.incAndGetReferenceCount();
                 inputHaEventWrapper.setHAContainer(this.haContainer);
                 if (!inputHaEventWrapper.getPutInProgress()) {
@@ -3527,10 +3537,10 @@ public class HARegionQueue implements RegionQueue {
    */
   protected void putEntryConditionallyIntoHAContainer(HAEventWrapper haEventWrapper) {
     if (haEventWrapper.incAndGetReferenceCount() == 1) {
-      // if (logger.isDebugEnabled()) {
-      // logger.fine("Putting event in haContainer: " + haEventWrapper);
-      // }
       haEventWrapper.setHAContainer(HARegionQueue.this.haContainer);
+      if (haEventWrapper.getClientUpdateMessage() == null) {
+        logger.info("RYGUY: Incoming null update message", new Exception());
+      }
       this.haContainer.put(haEventWrapper, haEventWrapper.getClientUpdateMessage());
     }
   }
