@@ -1312,8 +1312,16 @@ public class CacheClientNotifier {
     if (haContainer == null) {
       return;
     }
+
     if (conflatable instanceof HAEventWrapper) {
       HAEventWrapper wrapper = (HAEventWrapper) conflatable;
+
+      if (wrapper.getClientUpdateMessage() == null) {
+        logger.info(
+            "RYGUY: haWrapper.msg is null. Event ID: " + wrapper.hashCode() + "; Stack trace: ",
+            new Exception());
+      }
+
       if (!wrapper.getIsRefFromHAContainer()) {
         wrapper = (HAEventWrapper) haContainer.getKey(wrapper);
         if (wrapper != null && !wrapper.getPutInProgress()) {
@@ -1328,12 +1336,15 @@ public class CacheClientNotifier {
         }
       } else {
         // This wrapper resides in haContainer.
+        logger.info("RYGUY: setting wrapper.msg to null.  Event ID : " + wrapper.hashCode()
+            + "; System ID: " + System.identityHashCode(wrapper),
+            new Exception());
         wrapper.setClientUpdateMessage(null);
         wrapper.setPutInProgress(false);
         synchronized (wrapper) {
           if (wrapper.getReferenceCount() == 0L) {
             if (logger.isDebugEnabled()) {
-              logger.debug("Removing event from haContainer: {}", wrapper);
+              logger.info("Removing event from haContainer: {}", wrapper);
             }
             haContainer.remove(wrapper);
           }
