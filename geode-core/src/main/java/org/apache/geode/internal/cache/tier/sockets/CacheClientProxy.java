@@ -1573,12 +1573,7 @@ public class CacheClientProxy implements ClientSession {
                   this);
             }
 
-            if (conflatable instanceof HAEventWrapper) {
-              Conflatable conflatableClone = (Conflatable) ((HAEventWrapper) conflatable).clone();
-              this.queuedEvents.add(conflatableClone);
-            } else {
-              this.queuedEvents.add(conflatable);
-            }
+            this.queuedEvents.add(conflatable);
 
             return;
           }
@@ -1700,44 +1695,14 @@ public class CacheClientProxy implements ClientSession {
       }
       Conflatable nextEvent;
       while ((nextEvent = queuedEvents.poll()) != null) {
-        if (nextEvent instanceof HAEventWrapper) {
-          if (((HAEventWrapper) nextEvent).getClientUpdateMessage() == null) {
-            logger.info("RYGUY: Null CUMI for EvtID: " + nextEvent.getEventId());
-          }
-        }
-
         this._messageDispatcher.enqueueMessage(nextEvent);
-
-        if (nextEvent instanceof HAEventWrapper) {
-          synchronized (nextEvent) {
-            if (((HAEventWrapper) nextEvent).getIsRefFromHAContainer()) {
-              ((HAEventWrapper) nextEvent).setClientUpdateMessage(null);
-              ((HAEventWrapper) nextEvent).setPutInProgress(false);
-            }
-          }
-        }
       }
 
       // Now finish emptying the queue with synchronization to make
       // sure we don't miss any events.
       synchronized (this.queuedEventsSync) {
         while ((nextEvent = queuedEvents.poll()) != null) {
-          if (nextEvent instanceof HAEventWrapper) {
-            if (((HAEventWrapper) nextEvent).getClientUpdateMessage() == null) {
-              logger.info("RYGUY: Null CUMI for EvtID: " + nextEvent.getEventId());
-            }
-          }
-
           this._messageDispatcher.enqueueMessage(nextEvent);
-
-          if (nextEvent instanceof HAEventWrapper) {
-            synchronized (nextEvent) {
-              if (((HAEventWrapper) nextEvent).getIsRefFromHAContainer()) {
-                ((HAEventWrapper) nextEvent).setClientUpdateMessage(null);
-                ((HAEventWrapper) nextEvent).setPutInProgress(false);
-              }
-            }
-          }
         }
 
         this.messageDispatcherInit = false; // Done initialization.
