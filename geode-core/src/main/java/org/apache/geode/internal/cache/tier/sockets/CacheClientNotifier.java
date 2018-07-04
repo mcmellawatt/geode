@@ -1318,8 +1318,8 @@ public class CacheClientNotifier {
 
       if (wrapper.getClientUpdateMessage() == null) {
         logger.info(
-            "RYGUY: haWrapper.msg is null. Event ID: " + wrapper.hashCode() + "; Stack trace: ",
-            new Exception());
+            "RYGUY: haWrapper.msg is null. Event ID: " + wrapper.hashCode() + "; System identity: "
+                + System.identityHashCode(wrapper));
       }
 
       if (!wrapper.getIsRefFromHAContainer()) {
@@ -1327,9 +1327,9 @@ public class CacheClientNotifier {
         if (wrapper != null && !wrapper.getPutInProgress()) {
           synchronized (wrapper) {
             if (wrapper.getReferenceCount() == 0L) {
-              if (logger.isDebugEnabled()) {
-                logger.debug("Removing event from haContainer: {}", wrapper);
-              }
+              logger
+                  .info("RYGUY: CheckAndRemove (not in container) removing event from haContainer: "
+                      + wrapper + "; System identity: " + System.identityHashCode(wrapper));
               haContainer.remove(wrapper);
             }
           }
@@ -1337,15 +1337,15 @@ public class CacheClientNotifier {
       } else {
         // This wrapper resides in haContainer.
         logger.info("RYGUY: setting wrapper.msg to null.  Event ID : " + wrapper.hashCode()
-            + "; System ID: " + System.identityHashCode(wrapper),
-            new Exception());
+            + "; System ID: " + System.identityHashCode(wrapper));
         wrapper.setClientUpdateMessage(null);
         wrapper.setPutInProgress(false);
         synchronized (wrapper) {
           if (wrapper.getReferenceCount() == 0L) {
-            if (logger.isDebugEnabled()) {
-              logger.info("Removing event from haContainer: {}", wrapper);
-            }
+            // if (logger.isDebugEnabled()) {
+            logger.info("RYGUY: CheckAndRemove (in container) event from haContainer: "
+                + wrapper.hashCode() + "; System identity: " + System.identityHashCode(wrapper));
+            // }
             haContainer.remove(wrapper);
           }
         }
