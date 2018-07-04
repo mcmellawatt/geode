@@ -1562,6 +1562,10 @@ public class CacheClientProxy implements ClientSession {
     }
 
     if (clientMessage.needsNoAuthorizationCheck() || postDeliverAuthCheckPassed(clientMessage)) {
+      if (conflatable instanceof HAEventWrapper) {
+        ((HAEventWrapper) conflatable).setPutInProgress(true);
+      }
+
       // If dispatcher is getting initialized, add the event to temporary queue.
       if (this.messageDispatcherInit) {
         synchronized (this.queuedEventsSync) {
@@ -1575,6 +1579,14 @@ public class CacheClientProxy implements ClientSession {
 
             this.queuedEvents.add(conflatable);
 
+            ClientUpdateMessage myMsg = null;
+            if (conflatable instanceof HAEventWrapper) {
+              myMsg = ((HAEventWrapper) conflatable).getClientUpdateMessage();
+              if (myMsg == null) {
+                logger.info("RYGUY: haWrapper.msg is null. Event ID: " + conflatable.hashCode());
+              }
+            }
+
             return;
           }
         }
@@ -1582,6 +1594,9 @@ public class CacheClientProxy implements ClientSession {
 
       if (this._messageDispatcher != null) {
         this._messageDispatcher.enqueueMessage(conflatable);
+        if (conflatable instanceof HAEventWrapper) {
+          ((HAEventWrapper) conflatable).setPutInProgress(false);
+        }
       } else {
         this._statistics.incMessagesFailedQueued();
         if (logger.isDebugEnabled()) {
@@ -1696,6 +1711,9 @@ public class CacheClientProxy implements ClientSession {
       Conflatable nextEvent;
       while ((nextEvent = queuedEvents.poll()) != null) {
         this._messageDispatcher.enqueueMessage(nextEvent);
+        if (nextEvent instanceof HAEventWrapper) {
+          ((HAEventWrapper) nextEvent).setPutInProgress(false);
+        }
       }
 
       // Now finish emptying the queue with synchronization to make
@@ -1703,6 +1721,9 @@ public class CacheClientProxy implements ClientSession {
       synchronized (this.queuedEventsSync) {
         while ((nextEvent = queuedEvents.poll()) != null) {
           this._messageDispatcher.enqueueMessage(nextEvent);
+          if (nextEvent instanceof HAEventWrapper) {
+            ((HAEventWrapper) nextEvent).setPutInProgress(false);
+          }
         }
 
         this.messageDispatcherInit = false; // Done initialization.

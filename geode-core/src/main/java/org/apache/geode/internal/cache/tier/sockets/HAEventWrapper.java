@@ -19,6 +19,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 import org.apache.logging.log4j.Logger;
@@ -90,7 +91,7 @@ public class HAEventWrapper implements Conflatable, DataSerializableFixedID, Siz
    * If true, the entry containing this HAEventWrapper instance will not be removed from the
    * haContainer, even if the referenceCount value is zero.
    */
-  private transient boolean putInProgress = false;
+  private transient AtomicLong putInProgress = new AtomicLong();
 
   /**
    * A value true indicates that this instance is not used in the <code>haContainer</code>. So any
@@ -208,12 +209,20 @@ public class HAEventWrapper implements Conflatable, DataSerializableFixedID, Siz
     return this.clientCqs;
   }
 
-  public void setPutInProgress(boolean inProgress) {
-    this.putInProgress = inProgress;
+  public void setPutInProgress(boolean setInProgress) {
+    if (setInProgress) {
+      this.putInProgress.incrementAndGet();
+    } else {
+      long refCount = this.putInProgress.decrementAndGet();
+
+      if (refCount == 0 && getReferenceCount() == 0 && haContainer != null) {
+        haContainer.remove(this);
+      }
+    }
   }
 
   public boolean getPutInProgress() {
-    return this.putInProgress;
+    return this.putInProgress.get() > 0;
   }
 
   public void setIsRefFromHAContainer(boolean bool) {

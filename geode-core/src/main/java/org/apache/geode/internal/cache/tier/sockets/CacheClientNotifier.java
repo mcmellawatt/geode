@@ -892,8 +892,6 @@ public class CacheClientNotifier {
       }
     } else {
       HAEventWrapper wrapper = new HAEventWrapper(clientMessage);
-      // Set the putInProgress flag to true before starting the put on proxy's
-      // HA queues. Nowhere else, this flag is being set to true.
       wrapper.setPutInProgress(true);
       conflatable = wrapper;
     }
