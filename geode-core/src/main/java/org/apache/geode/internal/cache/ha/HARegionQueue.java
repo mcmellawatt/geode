@@ -3248,7 +3248,7 @@ public class HARegionQueue implements RegionQueue {
 
               logger.info("RYGUY: QRM Decrementing Event ID: " + event.hashCode() + "; Region: "
                   + this.owningQueue.regionName + "; System identity: "
-                  + System.identityHashCode(event));
+                  + System.identityHashCode(event) + "; ToString: " + event);
 
               owningQueue.decAndRemoveFromHAContainer((HAEventWrapper) event);
             }
@@ -3312,7 +3312,7 @@ public class HARegionQueue implements RegionQueue {
           if (wrapper instanceof HAEventWrapper) {
             logger.info("RYGUY: Primary Decrementing Event ID: " + wrapper.hashCode() + "; Region: "
                 + this.owningQueue.regionName + "; System identity: "
-                + System.identityHashCode(wrapper));
+                + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
 
             owningQueue.decAndRemoveFromHAContainer((HAEventWrapper) wrapper);
           }
@@ -3484,7 +3484,7 @@ public class HARegionQueue implements RegionQueue {
                 logger.info("RYGUY: Putting updated event in HA region with Event ID: "
                     + haContainerKey.hashCode() + "; Region: " + this.regionName + "; Ref count: "
                     + haContainerKey.getReferenceCount() + "; System identity: "
-                    + System.identityHashCode(haContainerKey));
+                    + System.identityHashCode(haContainerKey) + "; ToString: " + haContainerKey);
               } else {
                 haContainerKey = null;
               }
@@ -3494,7 +3494,8 @@ public class HARegionQueue implements RegionQueue {
               if (inputHaEventWrapper.getClientUpdateMessage() == null) {
                 logger.info("RYGUY: Other incoming null update message; Input event wrapper: "
                     + inputHaEventWrapper.hashCode() + "; System identity: "
-                    + System.identityHashCode(inputHaEventWrapper));
+                    + System.identityHashCode(inputHaEventWrapper) + "; ToString: "
+                    + inputHaEventWrapper);
               }
               inputHaEventWrapper.incAndGetReferenceCount();
               inputHaEventWrapper.setHAContainer(this.haContainer);
@@ -3507,7 +3508,8 @@ public class HARegionQueue implements RegionQueue {
               logger.info("RYGUY: Putting new event in HA region with Event ID: "
                   + inputHaEventWrapper.hashCode() + "; Region: " + this.regionName
                   + "; Ref count: " + inputHaEventWrapper.getReferenceCount()
-                  + "; System identity: " + System.identityHashCode(inputHaEventWrapper));
+                  + "; System identity: " + System.identityHashCode(inputHaEventWrapper)
+                  + "; ToString: " + inputHaEventWrapper);
             }
             break;
           }
@@ -3565,17 +3567,19 @@ public class HARegionQueue implements RegionQueue {
       haEventWrapper.setHAContainer(HARegionQueue.this.haContainer);
       if (haEventWrapper.getClientUpdateMessage() == null) {
         logger.info("RYGUY: Incoming null update message; Event ID:" + haEventWrapper.hashCode()
-            + "; System ID: " + System.identityHashCode(haEventWrapper));
+            + "; System ID: " + System.identityHashCode(haEventWrapper) + "; ToString: "
+            + haEventWrapper);
       }
 
       logger.info("RYGUY: Readding Event ID: " + haEventWrapper.hashCode() + "; Region: "
           + this.regionName + "; Client Message: " + haEventWrapper.getClientUpdateMessage()
-          + "; System ID: " + System.identityHashCode(haEventWrapper));
+          + "; System ID: " + System.identityHashCode(haEventWrapper) + "; ToString: "
+          + haEventWrapper);
 
       if (haEventWrapper.getClientUpdateMessage() == null) {
         logger.info("RYGUY: Client message was null when putting conditionally for Event ID: "
             + haEventWrapper.hashCode() + "; Region: " + this.regionName + "; System identity: "
-            + System.identityHashCode(haEventWrapper));
+            + System.identityHashCode(haEventWrapper) + "; ToString: " + haEventWrapper);
       }
 
       this.haContainer.put(haEventWrapper, haEventWrapper.getClientUpdateMessage());

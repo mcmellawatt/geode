@@ -1317,7 +1317,7 @@ public class CacheClientNotifier {
       if (wrapper.getClientUpdateMessage() == null) {
         logger.info(
             "RYGUY: haWrapper.msg is null. Event ID: " + wrapper.hashCode() + "; System identity: "
-                + System.identityHashCode(wrapper));
+                + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
       }
 
       if (!wrapper.getIsRefFromHAContainer()) {
@@ -1327,7 +1327,8 @@ public class CacheClientNotifier {
             if (wrapper.getReferenceCount() == 0L) {
               logger
                   .info("RYGUY: CheckAndRemove (not in container) removing event from haContainer: "
-                      + wrapper + "; System identity: " + System.identityHashCode(wrapper));
+                      + wrapper + "; System identity: " + System.identityHashCode(wrapper)
+                      + "; ToString: " + wrapper);
               haContainer.remove(wrapper);
             }
           }
@@ -1335,14 +1336,15 @@ public class CacheClientNotifier {
       } else {
         // This wrapper resides in haContainer.
         logger.info("RYGUY: setting wrapper.msg to null.  Event ID : " + wrapper.hashCode()
-            + "; System ID: " + System.identityHashCode(wrapper));
+            + "; System ID: " + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
         wrapper.setClientUpdateMessage(null);
         wrapper.decrementPutRefCount();
         synchronized (wrapper) {
           if (wrapper.getReferenceCount() == 0L) {
             // if (logger.isDebugEnabled()) {
             logger.info("RYGUY: CheckAndRemove (in container) event from haContainer: "
-                + wrapper.hashCode() + "; System identity: " + System.identityHashCode(wrapper));
+                + wrapper.hashCode() + "; System identity: " + System.identityHashCode(wrapper)
+                + "; ToString: " + wrapper);
             // }
             haContainer.remove(wrapper);
           }

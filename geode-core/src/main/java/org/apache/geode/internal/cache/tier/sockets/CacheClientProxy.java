@@ -1593,18 +1593,31 @@ public class CacheClientProxy implements ClientSession {
 
       if (this._messageDispatcher != null) {
         this._messageDispatcher.enqueueMessage(conflatable);
-        if (conflatable instanceof HAEventWrapper) {
-          ((HAEventWrapper) conflatable).decrementPutRefCount();
-        }
       } else {
         this._statistics.incMessagesFailedQueued();
-        if (logger.isDebugEnabled()) {
-          logger.debug(
-              "Message is not added to the queue. Message dispatcher for proxy: {} doesn't exist.",
-              this);
+        if (conflatable instanceof HAEventWrapper) {
+          logger.info(
+              "RYGUY: Message is not added to the queue. Message dispatcher for proxy: " + this
+                  + " doesn't exist. HAEventWrapper ID: " + conflatable.hashCode() + "; System ID: "
+                  + System.identityHashCode(conflatable) + "; ToString: " + conflatable.toString());
+        } else {
+          logger.info("RYGUY: Message is not added to the queue. Message dispatcher for proxy: "
+              + this + " doesn't exist. Conflatable ID: " + conflatable.hashCode() + "; System ID: "
+              + System.identityHashCode(conflatable) + "; ToString: " + conflatable.toString());
         }
       }
     } else {
+      if (conflatable instanceof HAEventWrapper) {
+        logger.info(
+            "RYGUY: Other Message is not added to the queue. Message dispatcher for proxy: " + this
+                + " doesn't exist. HAEventWrapper ID: " + conflatable.hashCode() + "; System ID: "
+                + System.identityHashCode(conflatable) + "; ToString: " + conflatable.toString());
+      } else {
+        logger.info("RYGUY: Other Message is not added to the queue. Message dispatcher for proxy: "
+            + this + " doesn't exist. Conflatable ID: " + conflatable.hashCode() + "; System ID: "
+            + System.identityHashCode(conflatable) + "; ToString: " + conflatable.toString());
+      }
+
       this._statistics.incMessagesFailedQueued();
     }
 
