@@ -19,7 +19,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 import org.apache.logging.log4j.Logger;
@@ -270,7 +269,8 @@ public class HAEventWrapper implements Conflatable, DataSerializableFixedID, Siz
     } else {
       return "HAEventWrapper[region=" + this.regionName + "; key=" + this.keyOfInterest
           + "; refCount=" + getReferenceCount() + "; inContainer=" + this.isRefFromHAContainer
-          + "; putInProgress=" + putInProgressCountUpdater.get(this) + "; event=" + this.eventIdentifier
+          + "; putInProgress=" + putInProgressCountUpdater.get(this) + "; event="
+          + this.eventIdentifier
           + ((this.clientUpdateMessage == null) ? "; no message" : ";with message")
           + ((this.clientUpdateMessage == null) ? ""
               : ("; op=" + this.clientUpdateMessage.getOperation()))
