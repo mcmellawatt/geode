@@ -14,6 +14,7 @@
  */
 package org.apache.geode.internal.cache.ha;
 
+import static org.apache.geode.management.internal.cli.i18n.CliStrings.GROUPS;
 import static org.apache.geode.test.dunit.Assert.assertEquals;
 import static org.apache.geode.test.dunit.Assert.assertNotNull;
 import static org.apache.geode.test.dunit.Assert.assertNull;
@@ -31,6 +32,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.awaitility.Awaitility;
+import org.junit.ClassRule;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -60,12 +62,21 @@ import org.apache.geode.test.dunit.VM;
 import org.apache.geode.test.dunit.Wait;
 import org.apache.geode.test.dunit.WaitCriterion;
 import org.apache.geode.test.dunit.internal.JUnit4DistributedTestCase;
+import org.apache.geode.test.dunit.rules.ClusterStartupRule;
+import org.apache.geode.test.dunit.rules.MemberVM;
 import org.apache.geode.test.junit.categories.ClientSubscriptionTest;
 import org.apache.geode.test.junit.categories.DistributedTest;
 import org.apache.geode.test.junit.categories.FlakyTest;
 
 @Category({DistributedTest.class, ClientSubscriptionTest.class})
 public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
+  @ClassRule
+  public static ClusterStartupRule lsRule = new ClusterStartupRule();
+  private static MemberVM locator;
+  private static MemberVM server1;
+  private static MemberVM server2;
+  private static MemberVM server3;
+  private static MemberVM server4;
 
   private static volatile boolean toCnt = true;
   private static volatile Thread createQueuesThread;
@@ -74,40 +85,18 @@ public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
   private static HARegionQueue hrq = null;
   private static Thread[] opThreads;
 
-  private VM vm0 = null;
-  private VM vm1 = null;
-  private VM vm3 = null;
-  private VM vm2 = null;
-
   /**
    * get the VM's
    */
   @Override
   public final void postSetUp() throws Exception {
-    final Host host = Host.getHost(0);
-    vm0 = host.getVM(0);
-    vm1 = host.getVM(1);
-    vm2 = host.getVM(2);
-    vm3 = host.getVM(3);
-    vm0.invoke(() -> HARegionQueueDUnitTest.toCnt = true);
-    vm1.invoke(() -> HARegionQueueDUnitTest.toCnt = true);
-    vm2.invoke(() -> HARegionQueueDUnitTest.toCnt = true);
-    vm3.invoke(() -> HARegionQueueDUnitTest.toCnt = true);
-  }
-
-  /**
-   * close the cache in tearDown
-   */
-  @Override
-  public final void preTearDown() throws Exception {
-    vm0.invoke(() -> HARegionQueueDUnitTest.closeCache());
-    vm1.invoke(() -> HARegionQueueDUnitTest.closeCache());
-    vm2.invoke(() -> HARegionQueueDUnitTest.closeCache());
-    vm3.invoke(() -> HARegionQueueDUnitTest.closeCache());
-
-    cache = null;
-    hrq = null;
-    opThreads = null;
+    Properties properties = new Properties();
+    properties.setProperty(GROUPS, "locatorGroup");
+    locator = lsRule.startLocatorVM(0, properties);
+    server1 = lsRule.startServerVM(1, "serverGroup1", locator.getPort());
+    server2 = lsRule.startServerVM(2, "serverGroup1", locator.getPort());
+    server3 = lsRule.startServerVM(3, "serverGroup1", locator.getPort());
+    server4 = lsRule.startServerVM(4, "serverGroup1", locator.getPort());
   }
 
   /**
@@ -128,70 +117,70 @@ public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
   }
 
   /**
-   * 1) Create mirrored HARegion region1 in VM1 and VM2 2) do a put in VM1 3) assert that the put
-   * has not propagated from VM1 to VM2 4) do a put in VM2 5) assert that the value in VM1 has not
-   * changed to due to put in VM2 6) assert put in VM2 was successful by doing a get
+   * 1) Create mirrored HARegion region1 in server2 and server3 2) do a put in server2 3) assert that the put
+   * has not propagated from server2 to server3 4) do a put in server3 5) assert that the value in server2 has not
+   * changed to due to put in server3 6) assert put in server3 was successful by doing a get
    */
   @Test
   public void testLocalPut() throws Exception {
-    vm0.invoke(() -> HARegionQueueDUnitTest.createRegion());
-    vm1.invoke(() -> HARegionQueueDUnitTest.createRegion());
-    vm0.invoke(() -> HARegionQueueDUnitTest.putValue1());
-    vm1.invoke(() -> HARegionQueueDUnitTest.getNull());
-    vm1.invoke(() -> HARegionQueueDUnitTest.putValue2());
-    vm0.invoke(() -> HARegionQueueDUnitTest.getValue1());
-    vm1.invoke(() -> HARegionQueueDUnitTest.getValue2());
+    server1.invoke(() -> HARegionQueueDUnitTest.createRegion());
+    server2.invoke(() -> HARegionQueueDUnitTest.createRegion());
+    server1.invoke(() -> HARegionQueueDUnitTest.putValue1());
+    server2.invoke(() -> HARegionQueueDUnitTest.getNull());
+    server2.invoke(() -> HARegionQueueDUnitTest.putValue2());
+    server1.invoke(() -> HARegionQueueDUnitTest.getValue1());
+    server2.invoke(() -> HARegionQueueDUnitTest.getValue2());
   }
 
   /**
-   * 1) Create mirrored HARegion region1 in VM1 and VM2 2) do a put in VM1 3) assert that the put
-   * has not propagated from VM1 to VM2 4) do a put in VM2 5) assert that the value in VM1 has not
-   * changed to due to put in VM2 6) assert respective puts the VMs were successful by doing a get
-   * 7) localDestroy key in VM1 8) assert key has been destroyed in VM1 9) assert key has not been
-   * destroyed in VM2
+   * 1) Create mirrored HARegion region1 in server2 and server3 2) do a put in server2 3) assert that the put
+   * has not propagated from server2 to server3 4) do a put in server3 5) assert that the value in server2 has not
+   * changed to due to put in server3 6) assert respective puts the VMs were successful by doing a get
+   * 7) localDestroy key in server2 8) assert key has been destroyed in server2 9) assert key has not been
+   * destroyed in server3
    */
   @Test
   public void testLocalDestroy() throws Exception {
-    vm0.invoke(() -> HARegionQueueDUnitTest.createRegion());
-    vm1.invoke(() -> HARegionQueueDUnitTest.createRegion());
-    vm0.invoke(() -> HARegionQueueDUnitTest.putValue1());
-    vm1.invoke(() -> HARegionQueueDUnitTest.getNull());
-    vm1.invoke(() -> HARegionQueueDUnitTest.putValue2());
-    vm0.invoke(() -> HARegionQueueDUnitTest.getValue1());
-    vm1.invoke(() -> HARegionQueueDUnitTest.getValue2());
-    vm0.invoke(() -> HARegionQueueDUnitTest.destroy());
-    vm0.invoke(() -> HARegionQueueDUnitTest.getNull());
-    vm1.invoke(() -> HARegionQueueDUnitTest.getValue2());
+    server1.invoke(() -> HARegionQueueDUnitTest.createRegion());
+    server2.invoke(() -> HARegionQueueDUnitTest.createRegion());
+    server1.invoke(() -> HARegionQueueDUnitTest.putValue1());
+    server2.invoke(() -> HARegionQueueDUnitTest.getNull());
+    server2.invoke(() -> HARegionQueueDUnitTest.putValue2());
+    server1.invoke(() -> HARegionQueueDUnitTest.getValue1());
+    server2.invoke(() -> HARegionQueueDUnitTest.getValue2());
+    server1.invoke(() -> HARegionQueueDUnitTest.destroy());
+    server1.invoke(() -> HARegionQueueDUnitTest.getNull());
+    server2.invoke(() -> HARegionQueueDUnitTest.getValue2());
   }
 
   /**
-   * 1) Create mirrored HARegion region1 in VM1 2) do a put in VM1 3) get the value in VM1 to assert
-   * put has happened successfully 4) Create mirrored HARegion region1 in VM2 5) do a get in VM2 to
-   * verify that value was got through GII 6) do a put in VM2 7) assert put in VM2 was successful
+   * 1) Create mirrored HARegion region1 in server2 2) do a put in server2 3) get the value in server2 to assert
+   * put has happened successfully 4) Create mirrored HARegion region1 in server3 5) do a get in server3 to
+   * verify that value was got through GII 6) do a put in server3 7) assert put in server3 was successful
    */
   @Test
   public void testGII() throws Exception {
-    vm0.invoke(() -> HARegionQueueDUnitTest.createRegion());
-    vm0.invoke(() -> HARegionQueueDUnitTest.putValue1());
-    vm0.invoke(() -> HARegionQueueDUnitTest.getValue1());
-    vm1.invoke(() -> HARegionQueueDUnitTest.createRegion());
-    vm1.invoke(() -> HARegionQueueDUnitTest.getValue1());
-    vm1.invoke(() -> HARegionQueueDUnitTest.putValue2());
-    vm1.invoke(() -> HARegionQueueDUnitTest.getValue2());
+    server1.invoke(() -> HARegionQueueDUnitTest.createRegion());
+    server1.invoke(() -> HARegionQueueDUnitTest.putValue1());
+    server1.invoke(() -> HARegionQueueDUnitTest.getValue1());
+    server2.invoke(() -> HARegionQueueDUnitTest.createRegion());
+    server2.invoke(() -> HARegionQueueDUnitTest.getValue1());
+    server2.invoke(() -> HARegionQueueDUnitTest.putValue2());
+    server2.invoke(() -> HARegionQueueDUnitTest.getValue2());
   }
 
   /**
-   * 1) Create mirrored HARegion region1 in VM1 2) do a put in VM1 3) get the value in VM1 to assert
-   * put has happened successfully 4) Create mirrored HARegion region1 in VM2 5) do a get in VM2 to
-   * verify that value was got through GII 6) do a put in VM2 7) assert put in VM2 was successful
+   * 1) Create mirrored HARegion region1 in server2 2) do a put in server2 3) get the value in server2 to assert
+   * put has happened successfully 4) Create mirrored HARegion region1 in server3 5) do a get in server3 to
+   * verify that value was got through GII 6) do a put in server3 7) assert put in server3 was successful
    */
   @Test
   public void testQRM() throws Exception {
-    vm0.invoke(() -> HARegionQueueDUnitTest.createRegionQueue());
-    vm1.invoke(() -> HARegionQueueDUnitTest.createRegionQueue());
-    vm0.invoke(() -> HARegionQueueDUnitTest.verifyAddingDispatchMesgs());
+    server1.invoke(() -> HARegionQueueDUnitTest.createRegionQueue());
+    server2.invoke(() -> HARegionQueueDUnitTest.createRegionQueue());
+    server1.invoke(() -> HARegionQueueDUnitTest.verifyAddingDispatchMesgs());
 
-    vm1.invoke(() -> HARegionQueueDUnitTest.verifyDispatchedMessagesRemoved());
+    server2.invoke(() -> HARegionQueueDUnitTest.verifyDispatchedMessagesRemoved());
   }
 
   /**
@@ -227,10 +216,10 @@ public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
             }
           }
         };
-    vm0.invoke(createQueue);
-    vm1.invoke(createQueue);
+    server1.invoke(createQueue);
+    server2.invoke(createQueue);
 
-    vm0.invoke(new CacheSerializableRunnable("takeFromVm0") {
+    server1.invoke(new CacheSerializableRunnable("takeFromserver1") {
       @Override
       public void run2() throws CacheException {
         try {
@@ -242,7 +231,7 @@ public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
       }
     });
 
-    vm1.invoke(new CacheSerializableRunnable("checkInVm1") {
+    server2.invoke(new CacheSerializableRunnable("checkInserver2") {
       @Override
       public void run2() throws CacheException {
         WaitCriterion ev = new WaitCriterion() {
@@ -635,10 +624,10 @@ public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
       }
     };
 
-    vm0.invoke(createRgnsAndQueues);
-    vm1.invoke(createRgnsAndQueues);
-    vm2.invoke(createRgnsAndQueues);
-    vm3.invoke(createRgnsAndQueues);
+    server1.invoke(createRgnsAndQueues);
+    server2.invoke(createRgnsAndQueues);
+    server3.invoke(createRgnsAndQueues);
+    server4.invoke(createRgnsAndQueues);
     CacheSerializableRunnable spawnThreadsAndperformOps =
         new CacheSerializableRunnable("Spawn multiple threads which do various operations") {
 
@@ -667,10 +656,10 @@ public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
           }
         };
 
-    vm0.invokeAsync(spawnThreadsAndperformOps);
-    vm1.invokeAsync(spawnThreadsAndperformOps);
-    vm2.invokeAsync(spawnThreadsAndperformOps);
-    vm3.invokeAsync(spawnThreadsAndperformOps);
+    server1.invokeAsync(spawnThreadsAndperformOps);
+    server2.invokeAsync(spawnThreadsAndperformOps);
+    server3.invokeAsync(spawnThreadsAndperformOps);
+    server4.invokeAsync(spawnThreadsAndperformOps);
 
 
     SerializableCallable guaranteeOperationsOccured =
@@ -687,13 +676,13 @@ public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
         };
 
     Awaitility.waitAtMost(30, TimeUnit.SECONDS)
-        .until(() -> assertTrue((Boolean) vm0.invoke(guaranteeOperationsOccured)));
+        .until(() -> assertTrue((Boolean) server1.invoke(guaranteeOperationsOccured)));
     Awaitility.waitAtMost(30, TimeUnit.SECONDS)
-        .until(() -> assertTrue((Boolean) vm1.invoke(guaranteeOperationsOccured)));
+        .until(() -> assertTrue((Boolean) server2.invoke(guaranteeOperationsOccured)));
     Awaitility.waitAtMost(30, TimeUnit.SECONDS)
-        .until(() -> assertTrue((Boolean) vm2.invoke(guaranteeOperationsOccured)));
+        .until(() -> assertTrue((Boolean) server3.invoke(guaranteeOperationsOccured)));
     Awaitility.waitAtMost(30, TimeUnit.SECONDS)
-        .until(() -> assertTrue((Boolean) vm3.invoke(guaranteeOperationsOccured)));
+        .until(() -> assertTrue((Boolean) server4.invoke(guaranteeOperationsOccured)));
 
     // In case of blocking HARegionQueue do some extra puts so that the
     // blocking threads
@@ -717,10 +706,10 @@ public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
           }
         };
 
-    vm0.invokeAsync(toggleFlag);
-    vm1.invokeAsync(toggleFlag);
-    vm2.invokeAsync(toggleFlag);
-    vm3.invokeAsync(toggleFlag);
+    server1.invokeAsync(toggleFlag);
+    server2.invokeAsync(toggleFlag);
+    server3.invokeAsync(toggleFlag);
+    server4.invokeAsync(toggleFlag);
 
     CacheSerializableRunnable joinWithThreads =
         new CacheSerializableRunnable("Join with the threads") {
@@ -736,10 +725,10 @@ public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
           }
         };
 
-    vm0.invoke(joinWithThreads);
-    vm1.invoke(joinWithThreads);
-    vm2.invoke(joinWithThreads);
-    vm3.invoke(joinWithThreads);
+    server1.invoke(joinWithThreads);
+    server2.invoke(joinWithThreads);
+    server3.invoke(joinWithThreads);
+    server4.invoke(joinWithThreads);
     System.getProperties().remove("QueueRemovalThreadWaitTime");
   }
 
@@ -849,8 +838,8 @@ public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
           }
         };
 
-    vm0.invoke(createQueuesAndThread);
-    vm1.invokeAsync(createQueues);
+    server1.invoke(createQueuesAndThread);
+    server2.invokeAsync(createQueues);
 
     CacheSerializableRunnable joinWithThread =
         new CacheSerializableRunnable("CreateCache, HARegionQueue join with thread") {
@@ -862,8 +851,8 @@ public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
             ThreadUtils.join(opThreads[0], 30 * 1000);
           }
         };
-    vm0.invoke(joinWithThread);
-    vm1.invoke(waitForCreateQueuesThread);
+    server1.invoke(joinWithThread);
+    server2.invoke(waitForCreateQueuesThread);
   }
 
   private static class RunOp extends Thread {
@@ -973,8 +962,8 @@ public class HARegionQueueDUnitTest extends JUnit4DistributedTestCase {
 
   @Test
   public void testForDuplicateEvents() throws Exception {
-    vm0.invoke(() -> HARegionQueueDUnitTest.createRegionQueue());
-    vm1.invoke(() -> HARegionQueueDUnitTest.createRegionQueueandCheckDuplicates());
+    server1.invoke(() -> HARegionQueueDUnitTest.createRegionQueue());
+    server2.invoke(() -> HARegionQueueDUnitTest.createRegionQueueandCheckDuplicates());
   }
 
   /**
