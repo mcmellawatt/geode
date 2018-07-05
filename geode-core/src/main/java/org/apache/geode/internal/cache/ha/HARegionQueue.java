@@ -3541,9 +3541,6 @@ public class HARegionQueue implements RegionQueue {
         msg.addClientCqs(proxyID, clientCQ);
       }
     }
-    // if (haEventWrapper.getPutInProgress()) {
-    // ((HAEventWrapper)entry.getKey()).setPutInProgress(true);
-    // }
 
     // This is a remote HAEventWrapper.
     // Add new Interested client lists.

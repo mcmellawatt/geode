@@ -1562,10 +1562,6 @@ public class CacheClientProxy implements ClientSession {
     }
 
     if (clientMessage.needsNoAuthorizationCheck() || postDeliverAuthCheckPassed(clientMessage)) {
-      if (conflatable instanceof HAEventWrapper) {
-        ((HAEventWrapper) conflatable).setPutInProgress(true);
-      }
-
       // If dispatcher is getting initialized, add the event to temporary queue.
       if (this.messageDispatcherInit) {
         synchronized (this.queuedEventsSync) {
@@ -1575,6 +1571,9 @@ public class CacheClientProxy implements ClientSession {
               logger.debug(
                   "Message dispatcher for proxy {} is getting initialized. Adding message to the queuedEvents.",
                   this);
+            }
+            if (conflatable instanceof HAEventWrapper) {
+              ((HAEventWrapper) conflatable).incrementPutRefCount();
             }
 
             this.queuedEvents.add(conflatable);
@@ -1595,7 +1594,7 @@ public class CacheClientProxy implements ClientSession {
       if (this._messageDispatcher != null) {
         this._messageDispatcher.enqueueMessage(conflatable);
         if (conflatable instanceof HAEventWrapper) {
-          ((HAEventWrapper) conflatable).setPutInProgress(false);
+          ((HAEventWrapper) conflatable).decrementPutRefCount();
         }
       } else {
         this._statistics.incMessagesFailedQueued();
@@ -1712,7 +1711,7 @@ public class CacheClientProxy implements ClientSession {
       while ((nextEvent = queuedEvents.poll()) != null) {
         this._messageDispatcher.enqueueMessage(nextEvent);
         if (nextEvent instanceof HAEventWrapper) {
-          ((HAEventWrapper) nextEvent).setPutInProgress(false);
+          ((HAEventWrapper) nextEvent).decrementPutRefCount();
         }
       }
 
@@ -1722,7 +1721,7 @@ public class CacheClientProxy implements ClientSession {
         while ((nextEvent = queuedEvents.poll()) != null) {
           this._messageDispatcher.enqueueMessage(nextEvent);
           if (nextEvent instanceof HAEventWrapper) {
-            ((HAEventWrapper) nextEvent).setPutInProgress(false);
+            ((HAEventWrapper) nextEvent).decrementPutRefCount();
           }
         }
 

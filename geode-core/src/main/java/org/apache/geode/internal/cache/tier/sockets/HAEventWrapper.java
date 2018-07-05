@@ -91,7 +91,9 @@ public class HAEventWrapper implements Conflatable, DataSerializableFixedID, Siz
    * If true, the entry containing this HAEventWrapper instance will not be removed from the
    * haContainer, even if the referenceCount value is zero.
    */
-  private transient AtomicLong putInProgress = new AtomicLong();
+  private volatile long putInProgressCount;
+  private static final AtomicLongFieldUpdater<HAEventWrapper> putInProgressCountUpdater =
+      AtomicLongFieldUpdater.newUpdater(HAEventWrapper.class, "putInProgressCount");
 
   /**
    * A value true indicates that this instance is not used in the <code>haContainer</code>. So any
@@ -209,20 +211,16 @@ public class HAEventWrapper implements Conflatable, DataSerializableFixedID, Siz
     return this.clientCqs;
   }
 
-  public void setPutInProgress(boolean setInProgress) {
-    if (setInProgress) {
-      this.putInProgress.incrementAndGet();
-    } else {
-      long refCount = this.putInProgress.decrementAndGet();
+  public long incrementPutRefCount() {
+    return putInProgressCountUpdater.getAndIncrement(this);
+  }
 
-      if (refCount == 0 && getReferenceCount() == 0 && haContainer != null) {
-        haContainer.remove(this);
-      }
-    }
+  public long decrementPutRefCount() {
+    return putInProgressCountUpdater.decrementAndGet(this);
   }
 
   public boolean getPutInProgress() {
-    return this.putInProgress.get() > 0;
+    return putInProgressCountUpdater.get(this) > 0;
   }
 
   public void setIsRefFromHAContainer(boolean bool) {
@@ -272,7 +270,7 @@ public class HAEventWrapper implements Conflatable, DataSerializableFixedID, Siz
     } else {
       return "HAEventWrapper[region=" + this.regionName + "; key=" + this.keyOfInterest
           + "; refCount=" + getReferenceCount() + "; inContainer=" + this.isRefFromHAContainer
-          + "; putInProgress=" + this.putInProgress + "; event=" + this.eventIdentifier
+          + "; putInProgress=" + putInProgressCountUpdater.get(this) + "; event=" + this.eventIdentifier
           + ((this.clientUpdateMessage == null) ? "; no message" : ";with message")
           + ((this.clientUpdateMessage == null) ? ""
               : ("; op=" + this.clientUpdateMessage.getOperation()))

@@ -892,7 +892,7 @@ public class CacheClientNotifier {
       }
     } else {
       HAEventWrapper wrapper = new HAEventWrapper(clientMessage);
-      wrapper.setPutInProgress(true);
+      wrapper.incrementPutRefCount();
       conflatable = wrapper;
     }
 
@@ -1337,7 +1337,7 @@ public class CacheClientNotifier {
         logger.info("RYGUY: setting wrapper.msg to null.  Event ID : " + wrapper.hashCode()
             + "; System ID: " + System.identityHashCode(wrapper));
         wrapper.setClientUpdateMessage(null);
-        wrapper.setPutInProgress(false);
+        wrapper.decrementPutRefCount();
         synchronized (wrapper) {
           if (wrapper.getReferenceCount() == 0L) {
             // if (logger.isDebugEnabled()) {
