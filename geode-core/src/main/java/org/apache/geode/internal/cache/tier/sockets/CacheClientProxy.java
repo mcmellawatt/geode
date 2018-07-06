@@ -1724,17 +1724,7 @@ public class CacheClientProxy implements ClientSession {
       while ((nextEvent = queuedEvents.poll()) != null) {
         this._messageDispatcher.enqueueMessage(nextEvent);
 
-        if (nextEvent instanceof HAEventWrapper) {
-          ((HAEventWrapper) nextEvent).decrementPutRefCount();
-
-          if (((HAEventWrapper) nextEvent).getIsRefFromHAContainer()) {
-            synchronized (nextEvent) {
-              if (!((HAEventWrapper) nextEvent).getPutInProgress()) {
-                ((HAEventWrapper) nextEvent).setClientUpdateMessage(null);
-              }
-            }
-          }
-        }
+        this._cacheClientNotifier.checkAndRemoveFromClientMsgsRegion(nextEvent);
       }
 
       // Now finish emptying the queue with synchronization to make
@@ -1743,17 +1733,7 @@ public class CacheClientProxy implements ClientSession {
         while ((nextEvent = queuedEvents.poll()) != null) {
           this._messageDispatcher.enqueueMessage(nextEvent);
 
-          if (nextEvent instanceof HAEventWrapper) {
-            ((HAEventWrapper) nextEvent).decrementPutRefCount();
-
-            if (((HAEventWrapper) nextEvent).getIsRefFromHAContainer()) {
-              synchronized (nextEvent) {
-                if (!((HAEventWrapper) nextEvent).getPutInProgress()) {
-                  ((HAEventWrapper) nextEvent).setClientUpdateMessage(null);
-                }
-              }
-            }
-          }
+          this._cacheClientNotifier.checkAndRemoveFromClientMsgsRegion(nextEvent);
         }
 
         this.messageDispatcherInit = false; // Done initialization.
