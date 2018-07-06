@@ -1371,6 +1371,7 @@ public class HARegionQueue implements RegionQueue {
         throw new InterruptedException();
       }
       object = (Conflatable) this.region.get(next);
+      Conflatable regionObject = object;
       if (object != null) {
         // peeked a object, so add the correponding counter to thread-context
         object = (object instanceof HAEventWrapper) ? (Conflatable) this.haContainer.get(object)
@@ -1390,11 +1391,10 @@ public class HARegionQueue implements RegionQueue {
         } else {
           logger.info(
               "RYGUY: Not a java.lang.NullPointerException, but encountered null for Position: "
-                  + next + "; Event ID: " + this.region.get(next).hashCode() + "; Region: "
+                  + next + "; Event ID: " + regionObject.hashCode() + "; Region: "
                   + this.regionName + "; System identity: "
-                  + System.identityHashCode(this.region.get(next)));
+                  + System.identityHashCode(regionObject));
         }
-
       }
     }
     // since size is zero, return null
