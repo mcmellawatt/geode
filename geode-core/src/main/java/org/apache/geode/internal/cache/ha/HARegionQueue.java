@@ -770,11 +770,9 @@ public class HARegionQueue implements RegionQueue {
                 if (haContainerMessage != null) {
                   ((HAEventWrapper) value).setClientUpdateMessage(haContainerMessage);
                 } else {
-                  if (isDebugEnabled) {
-                    logger.debug(
-                        "{} ATTENTION: found gii queued event with null event message.  Please see bug #44852: {}",
-                        this.regionName, value);
-                  }
+                  logger.info(
+                      "RYGUY: {} ATTENTION: found gii queued event with null event message.  Please see bug #44852: {}",
+                      this.regionName, value);
                   continue;
                 }
               }
@@ -3460,60 +3458,68 @@ public class HARegionQueue implements RegionQueue {
       HAEventWrapper inputHaEventWrapper = (HAEventWrapper) event;
 
       if (this.isQueueInitialized()) {
-        // This means that the haEventWrapper reference we have is not
-        // authentic, i.e. it doesn't refer to the HAEventWrapper instance
-        // in the haContainer, but to the one outside it.
-        HAEventWrapper haContainerKey = null;
-        do {
-          ClientUpdateMessageImpl haContainerEntry =
-              (ClientUpdateMessageImpl) ((HAContainerWrapper) this.haContainer)
-                  .putIfAbsent(inputHaEventWrapper, inputHaEventWrapper.getClientUpdateMessage());
-          if (haContainerEntry != null) {
-            haContainerKey = (HAEventWrapper) ((HAContainerWrapper) this.haContainer)
-                .getKey(inputHaEventWrapper);
-            if (haContainerKey == null) {
-              continue;
-            }
-            synchronized (haContainerKey) {
-              // assert the entry is still present
-              if (((HAContainerWrapper) this.haContainer).getKey(haContainerKey) != null) {
-                haContainerKey.incAndGetReferenceCount();
-                addClientCQsAndInterestList(haContainerEntry, inputHaEventWrapper,
-                    this.haContainer, this.regionName);
-                inputHaEventWrapper = haContainerKey;
-                logger.info("RYGUY: Putting updated event in HA region with Event ID: "
-                    + haContainerKey.hashCode() + "; Region: " + this.regionName + "; Ref count: "
-                    + haContainerKey.getReferenceCount() + "; System identity: "
-                    + System.identityHashCode(haContainerKey) + "; ToString: " + haContainerKey);
-              } else {
-                haContainerKey = null;
+        if (inputHaEventWrapper.getIsRefFromHAContainer()) {
+          putEntryConditionallyIntoHAContainer(inputHaEventWrapper);
+          logger.info("RYGUY: Putting conditionally into HA Container.  Event ID: "
+              + inputHaEventWrapper.hashCode() + "; System ID: "
+              + System.identityHashCode(inputHaEventWrapper) + "; CUMI: "
+              + inputHaEventWrapper.getClientUpdateMessage());
+        } else {
+          // This means that the haEventWrapper reference we have is not
+          // authentic, i.e. it doesn't refer to the HAEventWrapper instance
+          // in the haContainer, but to the one outside it.
+          HAEventWrapper haContainerKey = null;
+          do {
+            ClientUpdateMessageImpl haContainerEntry =
+                (ClientUpdateMessageImpl) ((HAContainerWrapper) this.haContainer)
+                    .putIfAbsent(inputHaEventWrapper, inputHaEventWrapper.getClientUpdateMessage());
+            if (haContainerEntry != null) {
+              haContainerKey = (HAEventWrapper) ((HAContainerWrapper) this.haContainer)
+                  .getKey(inputHaEventWrapper);
+              if (haContainerKey == null) {
+                continue;
               }
-            }
-          } else {
-            synchronized (inputHaEventWrapper) {
-              if (inputHaEventWrapper.getClientUpdateMessage() == null) {
-                logger.info("RYGUY: Other incoming null update message; Input event wrapper: "
-                    + inputHaEventWrapper.hashCode() + "; System identity: "
-                    + System.identityHashCode(inputHaEventWrapper) + "; ToString: "
-                    + inputHaEventWrapper);
+              synchronized (haContainerKey) {
+                // assert the entry is still present
+                if (((HAContainerWrapper) this.haContainer).getKey(haContainerKey) != null) {
+                  haContainerKey.incAndGetReferenceCount();
+                  addClientCQsAndInterestList(haContainerEntry, inputHaEventWrapper,
+                      this.haContainer, this.regionName);
+                  inputHaEventWrapper = haContainerKey;
+                  logger.info("RYGUY: Putting updated event in HA region with Event ID: "
+                      + haContainerKey.hashCode() + "; Region: " + this.regionName + "; Ref count: "
+                      + haContainerKey.getReferenceCount() + "; System identity: "
+                      + System.identityHashCode(haContainerKey) + "; ToString: " + haContainerKey);
+                } else {
+                  haContainerKey = null;
+                }
               }
-              inputHaEventWrapper.incAndGetReferenceCount();
-              inputHaEventWrapper.setHAContainer(this.haContainer);
-              if (!inputHaEventWrapper.getPutInProgress()) {
-                // This means that this is a GII'ed event. Hence we must
-                // explicitly set 'clientUpdateMessage' to null.
-                inputHaEventWrapper.setClientUpdateMessage(null);
+            } else {
+              synchronized (inputHaEventWrapper) {
+                if (inputHaEventWrapper.getClientUpdateMessage() == null) {
+                  logger.info("RYGUY: Other incoming null update message; Input event wrapper: "
+                      + inputHaEventWrapper.hashCode() + "; System identity: "
+                      + System.identityHashCode(inputHaEventWrapper) + "; ToString: "
+                      + inputHaEventWrapper);
+                }
+                inputHaEventWrapper.incAndGetReferenceCount();
+                inputHaEventWrapper.setHAContainer(this.haContainer);
+                if (!inputHaEventWrapper.getPutInProgress()) {
+                  // This means that this is a GII'ed event. Hence we must
+                  // explicitly set 'clientUpdateMessage' to null.
+                  inputHaEventWrapper.setClientUpdateMessage(null);
+                }
+                inputHaEventWrapper.setIsRefFromHAContainer(true);
+                logger.info("RYGUY: Putting new event in HA region with Event ID: "
+                    + inputHaEventWrapper.hashCode() + "; Region: " + this.regionName
+                    + "; Ref count: " + inputHaEventWrapper.getReferenceCount()
+                    + "; System identity: " + System.identityHashCode(inputHaEventWrapper)
+                    + "; ToString: " + inputHaEventWrapper);
               }
-              inputHaEventWrapper.setIsRefFromHAContainer(true);
-              logger.info("RYGUY: Putting new event in HA region with Event ID: "
-                  + inputHaEventWrapper.hashCode() + "; Region: " + this.regionName
-                  + "; Ref count: " + inputHaEventWrapper.getReferenceCount()
-                  + "; System identity: " + System.identityHashCode(inputHaEventWrapper)
-                  + "; ToString: " + inputHaEventWrapper);
+              break;
             }
-            break;
-          }
-        } while (haContainerKey == null);
+          } while (haContainerKey == null);
+        }
       }
 
       // Put the reference to the HAEventWrapper instance into the
