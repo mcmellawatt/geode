@@ -1723,8 +1723,17 @@ public class CacheClientProxy implements ClientSession {
       Conflatable nextEvent;
       while ((nextEvent = queuedEvents.poll()) != null) {
         this._messageDispatcher.enqueueMessage(nextEvent);
+
         if (nextEvent instanceof HAEventWrapper) {
           ((HAEventWrapper) nextEvent).decrementPutRefCount();
+
+          if (((HAEventWrapper) nextEvent).getIsRefFromHAContainer()) {
+            synchronized (nextEvent) {
+              if (!((HAEventWrapper) nextEvent).getPutInProgress()) {
+                ((HAEventWrapper) nextEvent).setClientUpdateMessage(null);
+              }
+            }
+          }
         }
       }
 
@@ -1733,8 +1742,17 @@ public class CacheClientProxy implements ClientSession {
       synchronized (this.queuedEventsSync) {
         while ((nextEvent = queuedEvents.poll()) != null) {
           this._messageDispatcher.enqueueMessage(nextEvent);
+
           if (nextEvent instanceof HAEventWrapper) {
             ((HAEventWrapper) nextEvent).decrementPutRefCount();
+
+            if (((HAEventWrapper) nextEvent).getIsRefFromHAContainer()) {
+              synchronized (nextEvent) {
+                if (!((HAEventWrapper) nextEvent).getPutInProgress()) {
+                  ((HAEventWrapper) nextEvent).setClientUpdateMessage(null);
+                }
+              }
+            }
           }
         }
 

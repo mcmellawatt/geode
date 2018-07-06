@@ -1306,7 +1306,7 @@ public class CacheClientNotifier {
    *
    * @since GemFire 5.7
    */
-  private void checkAndRemoveFromClientMsgsRegion(Conflatable conflatable) {
+  public void checkAndRemoveFromClientMsgsRegion(Conflatable conflatable) {
     if (haContainer == null) {
       return;
     }
@@ -1337,9 +1337,13 @@ public class CacheClientNotifier {
         // This wrapper resides in haContainer.
         logger.info("RYGUY: setting wrapper.msg to null.  Event ID : " + wrapper.hashCode()
             + "; System ID: " + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
-        wrapper.setClientUpdateMessage(null);
-        wrapper.decrementPutRefCount();
         synchronized (wrapper) {
+          wrapper.decrementPutRefCount();
+
+          if (!wrapper.getPutInProgress()) {
+            wrapper.setClientUpdateMessage(null);
+          }
+
           if (wrapper.getReferenceCount() == 0L) {
             // if (logger.isDebugEnabled()) {
             logger.info("RYGUY: CheckAndRemove (in container) event from haContainer: "
