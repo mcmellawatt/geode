@@ -2519,6 +2519,7 @@ public class CacheClientProxy implements ClientSession {
             waitForResumption();
           }
           try {
+
             clientMessage = (ClientMessage) this._messageQueue.peek();
           } catch (RegionDestroyedException skipped) {
             break;

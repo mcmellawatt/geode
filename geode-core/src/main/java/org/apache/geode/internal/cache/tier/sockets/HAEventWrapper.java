@@ -222,14 +222,6 @@ public class HAEventWrapper implements Conflatable, DataSerializableFixedID, Siz
     return putInProgressCountUpdater.get(this) > 0;
   }
 
-  public void setIsRefFromHAContainer(boolean bool) {
-    this.isRefFromHAContainer = bool;
-  }
-
-  public boolean getIsRefFromHAContainer() {
-    return this.isRefFromHAContainer;
-  }
-
   public void setHAContainer(Map container) {
     this.haContainer = container;
   }

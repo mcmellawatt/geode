@@ -1320,42 +1320,48 @@ public class CacheClientNotifier {
                 + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
       }
 
-      if (!wrapper.getIsRefFromHAContainer()) {
+      boolean checkedForRemoval = false;
+
+      while (!checkedForRemoval) {
         wrapper = (HAEventWrapper) haContainer.getKey(wrapper);
-        if (wrapper != null && !wrapper.getPutInProgress()) {
-          synchronized (wrapper) {
+
+        // Key has been removed from the HA container, so break
+        if (wrapper == null) {
+          break;
+        }
+
+        synchronized (wrapper) {
+          // Check if this wrapper is still the same as
+          // the one in the container after synchronizing
+          if (wrapper == haContainer.getKey(wrapper)) {
+            // The wrapper is still in the container
+            logger.info("RYGUY: setting wrapper.msg to null.  Event ID : " + wrapper.hashCode()
+                + "; System ID: " + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
+            wrapper.decrementPutRefCount();
+
+            if (!wrapper.getPutInProgress()) {
+              wrapper.setClientUpdateMessage(null);
+            }
+
             if (wrapper.getReferenceCount() == 0L) {
-              logger
-                  .info("RYGUY: CheckAndRemove (not in container) removing event from haContainer: "
-                      + wrapper + "; System identity: " + System.identityHashCode(wrapper)
-                      + "; ToString: " + wrapper);
+              // if (logger.isDebugEnabled()) {
+              logger.info("RYGUY: CheckAndRemove (in container) event from haContainer: "
+                  + wrapper.hashCode() + "; System identity: " + System.identityHashCode(wrapper)
+                  + "; ToString: " + wrapper);
+              // }
               haContainer.remove(wrapper);
             }
-          }
-        }
-      } else {
-        // This wrapper resides in haContainer.
-        logger.info("RYGUY: setting wrapper.msg to null.  Event ID : " + wrapper.hashCode()
-            + "; System ID: " + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
-        synchronized (wrapper) {
-          wrapper.decrementPutRefCount();
 
-          if (!wrapper.getPutInProgress()) {
-            wrapper.setClientUpdateMessage(null);
+            checkedForRemoval = true;
           }
 
-          if (wrapper.getReferenceCount() == 0L) {
-            // if (logger.isDebugEnabled()) {
-            logger.info("RYGUY: CheckAndRemove (in container) event from haContainer: "
-                + wrapper.hashCode() + "; System identity: " + System.identityHashCode(wrapper)
-                + "; ToString: " + wrapper);
-            // }
-            haContainer.remove(wrapper);
-          }
+          // ... wrapper was different than the one in the container,
+          // so try again
         }
       }
     }
   }
+
 
   /**
    * Returns the <code>CacheClientProxy</code> associated to the membershipID *
