@@ -211,7 +211,7 @@ public class HAEventWrapper implements Conflatable, DataSerializableFixedID, Siz
   }
 
   public long incrementPutRefCount() {
-    return putInProgressCountUpdater.getAndIncrement(this);
+    return putInProgressCountUpdater.incrementAndGet(this);
   }
 
   public long decrementPutRefCount() {

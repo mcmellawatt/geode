@@ -892,7 +892,10 @@ public class CacheClientNotifier {
       }
     } else {
       HAEventWrapper wrapper = new HAEventWrapper(clientMessage);
-      wrapper.incrementPutRefCount();
+      long refCount = wrapper.incrementPutRefCount();
+      logger.info("RYGUY: Initial increment PutRefCount to " + refCount
+          + " on HAEventWrapper with Event ID: " + wrapper.hashCode() + "; System ID: "
+          + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
       conflatable = wrapper;
     }
 
@@ -1335,11 +1338,14 @@ public class CacheClientNotifier {
           // the one in the container after synchronizing
           if (wrapper == haContainer.getKey(wrapper)) {
             // The wrapper is still in the container
-            logger.info("RYGUY: setting wrapper.msg to null.  Event ID : " + wrapper.hashCode()
-                + "; System ID: " + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
-            wrapper.decrementPutRefCount();
+            long refCount = wrapper.decrementPutRefCount();
+            logger.info("RYGUY: Decrementing PutRefCount to " + refCount
+                + " on HAEventWrapper with Event ID: " + conflatable.hashCode() + "; System ID: "
+                + System.identityHashCode(conflatable) + "; ToString: " + conflatable);
 
             if (!wrapper.getPutInProgress()) {
+              logger.info("RYGUY: setting wrapper.msg to null.  Event ID : " + wrapper.hashCode()
+                  + "; System ID: " + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
               wrapper.setClientUpdateMessage(null);
             }
 

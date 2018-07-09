@@ -1572,8 +1572,12 @@ public class CacheClientProxy implements ClientSession {
                   "Message dispatcher for proxy {} is getting initialized. Adding message to the queuedEvents.",
                   this);
             }
+
             if (conflatable instanceof HAEventWrapper) {
-              ((HAEventWrapper) conflatable).incrementPutRefCount();
+              long refCount = ((HAEventWrapper) conflatable).incrementPutRefCount();
+              logger.info("RYGUY: Incrementing PutRefCount to " + refCount
+                  + " on HAEventWrapper with Event ID: " + conflatable.hashCode() + "; System ID: "
+                  + System.identityHashCode(conflatable) + "; ToString: " + conflatable);
             }
 
             this.queuedEvents.add(conflatable);
@@ -1722,9 +1726,11 @@ public class CacheClientProxy implements ClientSession {
       }
       Conflatable nextEvent;
       while ((nextEvent = queuedEvents.poll()) != null) {
-        logger.info("RYGUY: Init Msg Dispatcher draining Event ID: " + nextEvent.hashCode()
-            + "; System ID: " + System.identityHashCode(nextEvent));
-
+        if (nextEvent instanceof HAEventWrapper) {
+          logger.info("RYGUY: Init Msg Dispatcher draining Event ID: " + nextEvent.hashCode()
+              + "; System ID: " + System.identityHashCode(nextEvent) + "; CUMI: "
+              + ((HAEventWrapper) nextEvent).getClientUpdateMessage());
+        }
         this._messageDispatcher.enqueueMessage(nextEvent);
 
         this._cacheClientNotifier.checkAndRemoveFromClientMsgsRegion(nextEvent);
@@ -1734,8 +1740,11 @@ public class CacheClientProxy implements ClientSession {
       // sure we don't miss any events.
       synchronized (this.queuedEventsSync) {
         while ((nextEvent = queuedEvents.poll()) != null) {
-          logger.info("RYGUY: Init Msg Dispatcher draining Event ID: " + nextEvent.hashCode()
-              + "; System ID: " + System.identityHashCode(nextEvent));
+          if (nextEvent instanceof HAEventWrapper) {
+            logger.info("RYGUY: Init Msg Dispatcher draining Event ID: " + nextEvent.hashCode()
+                + "; System ID: " + System.identityHashCode(nextEvent) + "; CUMI: "
+                + ((HAEventWrapper) nextEvent).getClientUpdateMessage());
+          }
 
           this._messageDispatcher.enqueueMessage(nextEvent);
 
