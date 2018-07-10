@@ -1323,6 +1323,17 @@ public class CacheClientNotifier {
                 + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
       }
 
+      long refCount = wrapper.decrementPutRefCount();
+      logger.info("RYGUY: Decrementing PutRefCount to " + refCount
+          + " on HAEventWrapper with Event ID: " + wrapper.hashCode() + "; System ID: "
+          + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
+
+      if (!wrapper.getPutInProgress()) {
+        logger.info("RYGUY: setting wrapper.msg to null.  Event ID : " + wrapper.hashCode()
+            + "; System ID: " + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
+        wrapper.setClientUpdateMessage(null);
+      }
+
       boolean checkedForRemoval = false;
 
       while (!checkedForRemoval) {
@@ -1337,18 +1348,6 @@ public class CacheClientNotifier {
           // Check if this wrapper is still the same as
           // the one in the container after synchronizing
           if (wrapper == haContainer.getKey(wrapper)) {
-            // The wrapper is still in the container
-            long refCount = wrapper.decrementPutRefCount();
-            logger.info("RYGUY: Decrementing PutRefCount to " + refCount
-                + " on HAEventWrapper with Event ID: " + wrapper.hashCode() + "; System ID: "
-                + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
-
-            if (!wrapper.getPutInProgress()) {
-              logger.info("RYGUY: setting wrapper.msg to null.  Event ID : " + wrapper.hashCode()
-                  + "; System ID: " + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
-              wrapper.setClientUpdateMessage(null);
-            }
-
             if (wrapper.getReferenceCount() == 0L) {
               // if (logger.isDebugEnabled()) {
               logger.info("RYGUY: CheckAndRemove (in container) event from haContainer: "

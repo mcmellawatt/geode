@@ -1729,8 +1729,10 @@ public class CacheClientProxy implements ClientSession {
         if (nextEvent instanceof HAEventWrapper) {
           logger.info("RYGUY: Init Msg Dispatcher draining Event ID: " + nextEvent.hashCode()
               + "; System ID: " + System.identityHashCode(nextEvent) + "; CUMI null: "
-              + ((HAEventWrapper) nextEvent).getClientUpdateMessage() == null + "; ToString: " + nextEvent);
+              + ((HAEventWrapper) nextEvent).getClientUpdateMessage() == null + "; ToString: "
+                  + nextEvent);
         }
+
         this._messageDispatcher.enqueueMessage(nextEvent);
 
         this._cacheClientNotifier.checkAndRemoveFromClientMsgsRegion(nextEvent);
@@ -1741,9 +1743,11 @@ public class CacheClientProxy implements ClientSession {
       synchronized (this.queuedEventsSync) {
         while ((nextEvent = queuedEvents.poll()) != null) {
           if (nextEvent instanceof HAEventWrapper) {
-            logger.info("RYGUY: Init Msg Dispatcher (synchronized) draining Event ID: " + nextEvent.hashCode()
+            logger.info("RYGUY: Init Msg Dispatcher (synchronized) draining Event ID: "
+                + nextEvent.hashCode()
                 + "; System ID: " + System.identityHashCode(nextEvent) + "; CUMI null: "
-                + ((HAEventWrapper) nextEvent).getClientUpdateMessage() == null + "; ToString: " + nextEvent);
+                + ((HAEventWrapper) nextEvent).getClientUpdateMessage() == null + "; ToString: "
+                    + nextEvent);
           }
 
           this._messageDispatcher.enqueueMessage(nextEvent);

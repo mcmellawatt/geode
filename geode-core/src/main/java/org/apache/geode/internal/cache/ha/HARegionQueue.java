@@ -609,16 +609,22 @@ public class HARegionQueue implements RegionQueue {
           logger.debug("{}: adding message to GII queue of size {}: {}", this.regionName,
               giiQueue.size(), object);
         }
+        HAEventWrapper haContainerKey = null;
+
         if (object instanceof HAEventWrapper) {
+          boolean cumiNull = ((HAEventWrapper) object).getClientUpdateMessage() == null;
           // bug #43609 - prevent loss of the message while in the queue
           logger.info("RYGUY: GII Queueing - Putting conditionally into HA container. Event ID: "
               + object.hashCode() + "; System ID: " + System.identityHashCode(object)
               + "; CUMI Null: "
-              + ((HAEventWrapper) object).getClientUpdateMessage() == null + "; ToString: "
-                  + object);
-          putEntryConditionallyIntoHAContainer((HAEventWrapper) object);
+              + cumiNull + "; ToString: "
+              + object);
+          haContainerKey = putEntryConditionallyIntoHAContainer((HAEventWrapper) object);
         }
-        this.giiQueue.add(object);
+
+        // Add the container key which was added to or found in the HA Container
+        // so draining operates on the true haContainerKey and not the remote haEventWrapper
+        this.giiQueue.add(haContainerKey);
       } else {
         if (logger.isTraceEnabled()) {
           logger.trace("{}: adding message to HA queue: {}", this.regionName, object);
@@ -783,8 +789,8 @@ public class HARegionQueue implements RegionQueue {
               }
             }
             basicPut(value);
-            // RYGUY: Why are we dec and removing here? Shouldn't this be handled by the message
-            // dispatcher?
+            // The HAEventWrapper ref count must be decremented because it was
+            // incremented when it was queued in giiQueue.
             if (value instanceof HAEventWrapper) {
               decAndRemoveFromHAContainer((HAEventWrapper) value);
             }
@@ -2135,12 +2141,13 @@ public class HARegionQueue implements RegionQueue {
               inputHaEventWrapper.setClientUpdateMessage(null);
               newValueCd =
                   new VMCachedDeserializable(entryHaEventWrapper, newValueCd.getSizeInBytes());
+              boolean cumiNull = entryHaEventWrapper.getClientUpdateMessage() == null;
               logger.info("RYGUY: GII Update of Event ID: " + entryHaEventWrapper.hashCode()
                   + "; System ID: " + System.identityHashCode(entryHaEventWrapper)
                   + "; Region: " + regionName + "; Ref count: "
                   + entryHaEventWrapper.getReferenceCount() + "; CUMI Null: "
-                  + entryHaEventWrapper.getClientUpdateMessage() == null + "; ToString: "
-                      + entryHaEventWrapper);
+                  + cumiNull + "; ToString: "
+                  + entryHaEventWrapper);
             } else {
               entryHaEventWrapper = null;
             }
@@ -2150,12 +2157,13 @@ public class HARegionQueue implements RegionQueue {
             inputHaEventWrapper.incAndGetReferenceCount();
             inputHaEventWrapper.setHAContainer(haContainer);
             inputHaEventWrapper.setClientUpdateMessage(null);
+            boolean cumiNull = inputHaEventWrapper.getClientUpdateMessage() == null;
             logger.info("RYGUY: GII Add of Event ID: " + inputHaEventWrapper.hashCode()
                 + "; System ID: " + System.identityHashCode(inputHaEventWrapper)
                 + "; Region: " + regionName + "; Ref count: "
                 + inputHaEventWrapper.getReferenceCount() + "; CUMI null: "
-                + inputHaEventWrapper.getClientUpdateMessage() == null + "; ToString: "
-                    + entryHaEventWrapper);
+                + cumiNull + "; ToString: "
+                + entryHaEventWrapper);
           }
           break;
         }
@@ -3000,6 +3008,8 @@ public class HARegionQueue implements RegionQueue {
       }
 
       boolean rejected = false;
+      Conflatable eventInHARegion = null;
+
       synchronized (this) {
         if (sequenceID > this.lastSequenceIDPut) {
           if (logger.isTraceEnabled()) {
@@ -3027,11 +3037,12 @@ public class HARegionQueue implements RegionQueue {
         if (lastDispatchedSequenceId == TOKEN_DESTROYED) {
           return false;
         }
+
         if (sequenceID > lastDispatchedSequenceId || owningQueue.puttingGIIDataInQueue) {
           // Insert the object into the Region
           Long position = owningQueue.tailKey.incrementAndGet();
 
-          owningQueue.putEventInHARegion(event, position);
+          eventInHARegion = owningQueue.putEventInHARegion(event, position);
 
           // Add the position counter to the LinkedHashSet
           if (this.counters == null) {
@@ -3040,12 +3051,12 @@ public class HARegionQueue implements RegionQueue {
           this.counters.put(position, null);
 
           // Check if the event is conflatable
-          if (owningQueue.shouldBeConflated(event)) {
+          if (owningQueue.shouldBeConflated(eventInHARegion)) {
             // Add to the conflation map & get the position of the
             // old conflatable entry. The old entry may have inserted by the
             // same
             // ThreadIdentifier or different one.
-            oldPosition = owningQueue.addToConflationMap(event, position);
+            oldPosition = owningQueue.addToConflationMap(eventInHARegion, position);
           }
 
           // Take the size lock & add to the list of availabelIds
@@ -3065,7 +3076,7 @@ public class HARegionQueue implements RegionQueue {
           ccn.getClientProxy(owningQueue.clientProxyID).getStatistics().incMessagesFailedQueued();
         }
       } else {
-        owningQueue.entryEnqueued(event);
+        owningQueue.entryEnqueued(eventInHARegion);
       }
       // Remove the old conflated position
       if (oldPosition != null) {
@@ -3465,17 +3476,18 @@ public class HARegionQueue implements RegionQueue {
    *
    * @since GemFire 5.7
    */
-  protected void putEventInHARegion(Conflatable event, Long position) {
+  protected Conflatable putEventInHARegion(Conflatable event, Long position) {
     if (event instanceof HAEventWrapper) {
       HAEventWrapper inputHaEventWrapper = (HAEventWrapper) event;
+      HAEventWrapper haContainerKey = null;
 
       if (this.isQueueInitialized()) {
+        boolean cumiNull = inputHaEventWrapper.getClientUpdateMessage() == null;
         logger.info("RYGUY: putEventInHARegion - Putting conditionally into HA container. "
             + inputHaEventWrapper.hashCode() + "; System ID: "
             + System.identityHashCode(inputHaEventWrapper) + "; CUMI null: "
-            + ((HAEventWrapper) inputHaEventWrapper).getClientUpdateMessage() == null
-                + "; ToString: " + inputHaEventWrapper);
-        putEntryConditionallyIntoHAContainer(inputHaEventWrapper);
+            + cumiNull + "; ToString: " + inputHaEventWrapper);
+        haContainerKey = putEntryConditionallyIntoHAContainer(inputHaEventWrapper);
       }
 
       // Put the reference to the HAEventWrapper instance into the
@@ -3484,7 +3496,9 @@ public class HARegionQueue implements RegionQueue {
         logger.debug("adding inputHaEventWrapper to HARegion at " + position + ":"
             + inputHaEventWrapper + " for " + this.regionName);
       }
-      this.region.put(position, inputHaEventWrapper);
+      this.region.put(position, haContainerKey);
+
+      return haContainerKey;
     } else { // (event instanceof ClientMarkerMessageImpl OR ConflatableObject OR
              // ClientInstantiatorMessage)
       if (logger.isDebugEnabled()) {
@@ -3492,6 +3506,8 @@ public class HARegionQueue implements RegionQueue {
             + this.regionName);
       }
       this.region.put(position, event);
+
+      return event;
     }
   }
 
@@ -3524,9 +3540,11 @@ public class HARegionQueue implements RegionQueue {
    * @param inputHaEventWrapper An instance of {@code HAEventWrapper}
    * @since GemFire 5.7
    */
-  protected void putEntryConditionallyIntoHAContainer(HAEventWrapper inputHaEventWrapper) {
+  protected HAEventWrapper putEntryConditionallyIntoHAContainer(
+      HAEventWrapper inputHaEventWrapper) {
     HAEventWrapper haContainerKey = null;
-    do {
+
+    while (haContainerKey == null) {
       if (inputHaEventWrapper.getClientUpdateMessage() == null) {
         logger.info("RYGUY: CUMI was null for Event ID: " + inputHaEventWrapper.hashCode()
             + "; System ID: " + System.identityHashCode(inputHaEventWrapper) + "; ToString: "
@@ -3555,13 +3573,13 @@ public class HARegionQueue implements RegionQueue {
                   this.haContainer, this.regionName);
             }
 
-            inputHaEventWrapper = haContainerKey;
+            boolean cumiNull = haContainerKey.getClientUpdateMessage() == null;
             logger.info("RYGUY: Putting updated event in HA region with Event ID: "
                 + haContainerKey.hashCode() + "; Region: " + this.regionName + "; Ref count: "
                 + haContainerKey.getReferenceCount() + "; System identity: "
                 + System.identityHashCode(haContainerKey) + "; CUMI null: "
-                + haContainerKey.getClientUpdateMessage() == null + "; ToString: "
-                    + haContainerKey);
+                + cumiNull + "; ToString: "
+                + haContainerKey);
           } else {
             haContainerKey = null;
           }
@@ -3569,11 +3587,12 @@ public class HARegionQueue implements RegionQueue {
       } else {
         synchronized (inputHaEventWrapper) {
           if (inputHaEventWrapper.getClientUpdateMessage() == null) {
+            boolean cumiNull = haContainerKey.getClientUpdateMessage() == null;
             logger.info("RYGUY: Other incoming null update message; Input event wrapper: "
                 + inputHaEventWrapper.hashCode() + "; System identity: "
                 + System.identityHashCode(inputHaEventWrapper) + "; CUMI null: "
-                + haContainerKey.getClientUpdateMessage() == null + "; ToString: "
-                    + inputHaEventWrapper);
+                + cumiNull + "; ToString: "
+                + inputHaEventWrapper);
           }
           inputHaEventWrapper.incAndGetReferenceCount();
           inputHaEventWrapper.setHAContainer(this.haContainer);
@@ -3582,16 +3601,21 @@ public class HARegionQueue implements RegionQueue {
             // explicitly set 'clientUpdateMessage' to null.
             inputHaEventWrapper.setClientUpdateMessage(null);
           }
+
+          boolean cumiNull = inputHaEventWrapper.getClientUpdateMessage() == null;
           logger.info("RYGUY: Putting new event in HA region with Event ID: "
               + inputHaEventWrapper.hashCode() + "; Region: " + this.regionName
               + "; Ref count: " + inputHaEventWrapper.getReferenceCount()
               + "; System identity: " + System.identityHashCode(inputHaEventWrapper)
-              + "; CUMI null: " + inputHaEventWrapper.getClientUpdateMessage() == null
-                  + "; ToString: " + inputHaEventWrapper);
+              + "; CUMI null: " + cumiNull
+              + "; ToString: " + inputHaEventWrapper);
         }
-        break;
+
+        haContainerKey = inputHaEventWrapper;
       }
-    } while (haContainerKey == null);
+    }
+
+    return haContainerKey;
   }
 
   /**
