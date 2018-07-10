@@ -1728,8 +1728,8 @@ public class CacheClientProxy implements ClientSession {
       while ((nextEvent = queuedEvents.poll()) != null) {
         if (nextEvent instanceof HAEventWrapper) {
           logger.info("RYGUY: Init Msg Dispatcher draining Event ID: " + nextEvent.hashCode()
-              + "; System ID: " + System.identityHashCode(nextEvent) + "; CUMI: "
-              + ((HAEventWrapper) nextEvent).getClientUpdateMessage());
+              + "; System ID: " + System.identityHashCode(nextEvent) + "; CUMI null: "
+              + ((HAEventWrapper) nextEvent).getClientUpdateMessage() == null + "; ToString: " + nextEvent);
         }
         this._messageDispatcher.enqueueMessage(nextEvent);
 
@@ -1741,9 +1741,9 @@ public class CacheClientProxy implements ClientSession {
       synchronized (this.queuedEventsSync) {
         while ((nextEvent = queuedEvents.poll()) != null) {
           if (nextEvent instanceof HAEventWrapper) {
-            logger.info("RYGUY: Init Msg Dispatcher draining Event ID: " + nextEvent.hashCode()
-                + "; System ID: " + System.identityHashCode(nextEvent) + "; CUMI: "
-                + ((HAEventWrapper) nextEvent).getClientUpdateMessage());
+            logger.info("RYGUY: Init Msg Dispatcher (synchronized) draining Event ID: " + nextEvent.hashCode()
+                + "; System ID: " + System.identityHashCode(nextEvent) + "; CUMI null: "
+                + ((HAEventWrapper) nextEvent).getClientUpdateMessage() == null + "; ToString: " + nextEvent);
           }
 
           this._messageDispatcher.enqueueMessage(nextEvent);

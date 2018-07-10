@@ -3527,16 +3527,6 @@ public class HARegionQueue implements RegionQueue {
   protected void putEntryConditionallyIntoHAContainer(HAEventWrapper inputHaEventWrapper) {
     HAEventWrapper haContainerKey = null;
     do {
-      // if (inputHaEventWrapper.getClientUpdateMessage() == null) {
-      // ClientUpdateMessageImpl haContainerEntry =
-      // (ClientUpdateMessageImpl) ((HAContainerWrapper) this.haContainer)
-      // .get(inputHaEventWrapper);
-      //
-      // if (haContainerEntry == null) {
-      // break;
-      // }
-      // }
-
       if (inputHaEventWrapper.getClientUpdateMessage() == null) {
         logger.info("RYGUY: CUMI was null for Event ID: " + inputHaEventWrapper.hashCode()
             + "; System ID: " + System.identityHashCode(inputHaEventWrapper) + "; ToString: "

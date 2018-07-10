@@ -1340,8 +1340,8 @@ public class CacheClientNotifier {
             // The wrapper is still in the container
             long refCount = wrapper.decrementPutRefCount();
             logger.info("RYGUY: Decrementing PutRefCount to " + refCount
-                + " on HAEventWrapper with Event ID: " + conflatable.hashCode() + "; System ID: "
-                + System.identityHashCode(conflatable) + "; ToString: " + conflatable);
+                + " on HAEventWrapper with Event ID: " + wrapper.hashCode() + "; System ID: "
+                + System.identityHashCode(wrapper) + "; ToString: " + wrapper);
 
             if (!wrapper.getPutInProgress()) {
               logger.info("RYGUY: setting wrapper.msg to null.  Event ID : " + wrapper.hashCode()
