@@ -775,6 +775,7 @@ public class HARegionQueue implements RegionQueue {
               logger.debug("{} draining #{}: {}", this.regionName, (actualCount + 1), value);
             }
             if (value instanceof HAEventWrapper) {
+              //TODO: RYGUY: This is a bandaid and we may not need it.
               if (((HAEventWrapper) value).getClientUpdateMessage() == null) {
                 // if there is no wrapped message look for it in the HA container map
                 ClientUpdateMessageImpl haContainerMessage =
@@ -794,6 +795,10 @@ public class HARegionQueue implements RegionQueue {
             // incremented when it was queued in giiQueue.
             if (value instanceof HAEventWrapper) {
               ((HAEventWrapper) value).decrementPutRefCount();
+              //TODO: RYGUY: The put ref count should cover us and we no longer need to bump/dec the
+              //HAEventWrapper ref count.  If the wrapper was removed from the container, say by QRM, we will
+              //just do putIfAbsent and add it back in.  The CUMI will not be null because we had not decremented
+              //the putRefCount yet when we did basicPut().
               decAndRemoveFromHAContainer((HAEventWrapper) value);
             }
           } catch (NoSuchElementException ignore) {
