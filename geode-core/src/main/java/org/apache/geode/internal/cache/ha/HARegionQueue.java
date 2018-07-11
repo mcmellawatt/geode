@@ -621,6 +621,7 @@ public class HARegionQueue implements RegionQueue {
               + "; CUMI Null: "
               + cumiNull + "; ToString: "
               + wrapper);
+          wrapper.incrementPutRefCount();
           putEntryConditionallyIntoHAContainer(wrapper);
         }
 
@@ -792,6 +793,7 @@ public class HARegionQueue implements RegionQueue {
             // The HAEventWrapper ref count must be decremented because it was
             // incremented when it was queued in giiQueue.
             if (value instanceof HAEventWrapper) {
+              ((HAEventWrapper) value).decrementPutRefCount();
               decAndRemoveFromHAContainer((HAEventWrapper) value);
             }
           } catch (NoSuchElementException ignore) {
