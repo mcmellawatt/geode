@@ -617,11 +617,10 @@ public class HARegionQueue implements RegionQueue {
           boolean cumiNull = wrapper.getClientUpdateMessage() == null;
           // bug #43609 - prevent loss of the message while in the queue
           logger.info("RYGUY: GII Queueing - Putting conditionally into HA container. Event ID: "
-              + object.hashCode() + "; System ID: " + System.identityHashCode(object)
+              + wrapper.hashCode() + "; System ID: " + System.identityHashCode(wrapper)
               + "; CUMI Null: "
               + cumiNull + "; ToString: "
-              + object);
-          wrapper.incrementPutRefCount();
+              + wrapper);
           putEntryConditionallyIntoHAContainer(wrapper);
         }
 
@@ -793,22 +792,7 @@ public class HARegionQueue implements RegionQueue {
             // The HAEventWrapper ref count must be decremented because it was
             // incremented when it was queued in giiQueue.
             if (value instanceof HAEventWrapper) {
-              HAEventWrapper wrapper = (HAEventWrapper) value;
-
-              synchronized (wrapper) {
-                wrapper.decrementPutRefCount();
-
-                if (!wrapper.getPutInProgress()) {
-                  logger
-                      .info("RYGUY: GII queue drain - setting wrapper.msg to null.  Event ID : "
-                          + wrapper.hashCode()
-                          + "; System ID: " + System.identityHashCode(wrapper) + "; ToString: "
-                          + wrapper);
-                  wrapper.setClientUpdateMessage(null);
-                }
-
-                decAndRemoveFromHAContainer((HAEventWrapper) value);
-              }
+              decAndRemoveFromHAContainer((HAEventWrapper) value);
             }
           } catch (NoSuchElementException ignore) {
             break;
@@ -3504,12 +3488,12 @@ public class HARegionQueue implements RegionQueue {
             + System.identityHashCode(inputHaEventWrapper) + "; CUMI null: "
             + cumiNull + "; ToString: " + inputHaEventWrapper);
         haContainerKey = putEntryConditionallyIntoHAContainer(inputHaEventWrapper);
+      } else {
+        haContainerKey = inputHaEventWrapper;
       }
 
-      // Put the reference to the HAEventWrapper instance into the
-      // HA queue.
       if (logger.isDebugEnabled()) {
-        logger.debug("adding inputHaEventWrapper to HARegion at " + position + ":"
+        logger.debug("adding haContainerKey to HARegion at " + position + ":"
             + inputHaEventWrapper + " for " + this.regionName);
       }
       this.region.put(position, haContainerKey);
