@@ -619,12 +619,9 @@ public class HARegionQueue implements RegionQueue {
               + "; CUMI Null: "
               + cumiNull + "; ToString: "
               + object);
-          haContainerKey = putEntryConditionallyIntoHAContainer((HAEventWrapper) object);
+          putEntryConditionallyIntoHAContainer((HAEventWrapper) object);
         }
-
-        // Add the container key which was added to or found in the HA Container
-        // so draining operates on the true haContainerKey and not the remote haEventWrapper
-        this.giiQueue.add(haContainerKey);
+        this.giiQueue.add(object);
       } else {
         if (logger.isTraceEnabled()) {
           logger.trace("{}: adding message to HA queue: {}", this.regionName, object);
@@ -3754,34 +3751,47 @@ public class HARegionQueue implements RegionQueue {
   }
 
   /**
-   * IMPORTANT: <br>
-   * The wrapper passed here must be the authentic wrapper, i.e. it must be the one referred by the
-   * HARegion underlying this queue. <br>
-   * Decrements wrapper's reference count by one. If the decremented ref count is zero and put is
+   * Decrements reference count for the wrapper in the container by one. If the decremented ref
+   * count is zero and put is
    * not in progress, removes the entry from the haContainer.
    *
    * @since GemFire 5.7
    */
   public void decAndRemoveFromHAContainer(HAEventWrapper wrapper) {
-    long refCount = wrapper.decAndGetReferenceCount();
+    boolean decAndRemovePerformed = false;
 
-    logger.info("RYGUY: Decremented Event ID: " + wrapper.hashCode() + "; System ID: "
-        + System.identityHashCode(wrapper) + "; Region: "
-        + this.regionName + "; Ref count: " + refCount + "; ToString: " + wrapper);
+    while (!decAndRemovePerformed) {
+      HAEventWrapper haContainerKey =
+          (HAEventWrapper) ((HAContainerWrapper) haContainer).getKey(wrapper);
 
-    if (refCount == 0L && !wrapper.getPutInProgress()) {
-      synchronized (wrapper) {
-        if (wrapper.getReferenceCount() == 0L) {
-          if (logger.isDebugEnabled()) {
-            logger.debug("Removing event from {}: {}", this.region.getFullPath(),
-                wrapper.getEventId());
+      if (haContainerKey == null) {
+        break;
+      }
+
+      synchronized (haContainerKey) {
+        if (haContainerKey == (HAEventWrapper) ((HAContainerWrapper) haContainer).getKey(wrapper)) {
+          long refCount = haContainerKey.decAndGetReferenceCount();
+
+          logger.info("RYGUY: Decremented Event ID: " + haContainerKey.hashCode() + "; System ID: "
+              + System.identityHashCode(haContainerKey) + "; Region: "
+              + this.regionName + "; Ref count: " + refCount + "; ToString: " + haContainerKey);
+
+          if (refCount == 0L && !haContainerKey.getPutInProgress()) {
+            if (haContainerKey.getReferenceCount() == 0L) {
+              if (logger.isDebugEnabled()) {
+                logger.debug("Removing event from {}: {}", this.region.getFullPath(),
+                    haContainerKey.getEventId());
+              }
+
+              HARegionQueue.this.haContainer.remove(haContainerKey);
+
+              logger.info(
+                  "RYGUY: Removed Event ID: " + haContainerKey.hashCode() + "; System ID: "
+                      + System.identityHashCode(haContainerKey) + " Region: " + this.regionName
+                      + "; ToString: " + haContainerKey);
+            }
           }
-          HARegionQueue.this.haContainer.remove(wrapper);
-
-          logger.info(
-              "RYGUY: Removed Event ID: " + wrapper.hashCode() + "; System ID: "
-                  + System.identityHashCode(wrapper) + " Region: " + this.regionName
-                  + "; ToString: " + wrapper);
+          decAndRemovePerformed = true;
         }
       }
     }
