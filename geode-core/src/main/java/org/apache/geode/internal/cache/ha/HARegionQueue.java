@@ -612,15 +612,19 @@ public class HARegionQueue implements RegionQueue {
         HAEventWrapper haContainerKey = null;
 
         if (object instanceof HAEventWrapper) {
-          boolean cumiNull = ((HAEventWrapper) object).getClientUpdateMessage() == null;
+          HAEventWrapper wrapper = (HAEventWrapper) object;
+
+          boolean cumiNull = wrapper.getClientUpdateMessage() == null;
           // bug #43609 - prevent loss of the message while in the queue
           logger.info("RYGUY: GII Queueing - Putting conditionally into HA container. Event ID: "
               + object.hashCode() + "; System ID: " + System.identityHashCode(object)
               + "; CUMI Null: "
               + cumiNull + "; ToString: "
               + object);
-          putEntryConditionallyIntoHAContainer((HAEventWrapper) object);
+          wrapper.incrementPutRefCount();
+          putEntryConditionallyIntoHAContainer(wrapper);
         }
+
         this.giiQueue.add(object);
       } else {
         if (logger.isTraceEnabled()) {
@@ -789,7 +793,22 @@ public class HARegionQueue implements RegionQueue {
             // The HAEventWrapper ref count must be decremented because it was
             // incremented when it was queued in giiQueue.
             if (value instanceof HAEventWrapper) {
-              decAndRemoveFromHAContainer((HAEventWrapper) value);
+              HAEventWrapper wrapper = (HAEventWrapper) value;
+
+              synchronized (wrapper) {
+                wrapper.decrementPutRefCount();
+
+                if (!wrapper.getPutInProgress()) {
+                  logger
+                      .info("RYGUY: GII queue drain - setting wrapper.msg to null.  Event ID : "
+                          + wrapper.hashCode()
+                          + "; System ID: " + System.identityHashCode(wrapper) + "; ToString: "
+                          + wrapper);
+                  wrapper.setClientUpdateMessage(null);
+                }
+
+                decAndRemoveFromHAContainer((HAEventWrapper) value);
+              }
             }
           } catch (NoSuchElementException ignore) {
             break;
