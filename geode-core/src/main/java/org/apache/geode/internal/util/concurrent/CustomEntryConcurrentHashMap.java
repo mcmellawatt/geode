@@ -57,10 +57,13 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import org.apache.logging.log4j.Logger;
+
 import org.apache.geode.CancelException;
 import org.apache.geode.internal.cache.RegionEntry;
 import org.apache.geode.internal.cache.entries.OffHeapRegionEntry;
 import org.apache.geode.internal.cache.wan.GatewaySenderEventImpl;
+import org.apache.geode.internal.logging.LogService;
 import org.apache.geode.internal.offheap.OffHeapRegionEntryHelper;
 import org.apache.geode.internal.size.SingleObjectSizer;
 import org.apache.geode.internal.util.ArrayUtils;
@@ -170,6 +173,8 @@ public class CustomEntryConcurrentHashMap<K, V> extends AbstractMap<K, V>
    * value before removing from segment.
    */
   private static final Object NO_OBJECT_TOKEN = new Object();
+
+  protected static final Logger logger = LogService.getLogger();
 
   // End GemStone addition
 
@@ -1786,6 +1791,8 @@ public class CustomEntryConcurrentHashMap<K, V> extends AbstractMap<K, V>
   // GemStone addition
   @Override
   public void clearWithExecutor(Executor executor) {
+    logger.info("RYGUY: Clearing map entries.", new Exception());
+
     ArrayList<HashEntry<?, ?>> entries = null;
     try {
       for (int i = 0; i < this.segments.length; ++i) {

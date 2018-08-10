@@ -139,13 +139,14 @@ public class ParallelGatewaySenderEventProcessor extends AbstractGatewaySenderEv
         }
         getSender().getStatistics().endPut(start);
       } else {
-        if (logger.isDebugEnabled()) {
-          logger.debug("The Event {} is filtered.", gatewayQueueEvent);
-        }
+        // if (logger.isDebugEnabled()) {
+        logger.info("RYGUY: The Event {} is filtered.", gatewayQueueEvent.hashCode());
+        // }
         getSender().getStatistics().incEventsFiltered();
       }
     } finally {
       if (!queuedEvent) {
+        logger.info("RYGUY: Failed to queue event.  Event: " + gatewayQueueEvent.hashCode());
         // it was not queued for some reason
         ((GatewaySenderEventImpl) gatewayQueueEvent).release();
       }

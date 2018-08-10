@@ -520,6 +520,8 @@ public class BucketRegion extends DistributedRegion implements Bucket {
       boolean overwriteDestroyed) throws TimeoutException, CacheWriterException {
     beginLocalWrite(event);
 
+    logger.info("RYGUY: Doing put on region " + this.getName() + "; Event " + event.hashCode());
+
     try {
       if (this.partitionedRegion.isParallelWanEnabled()) {
         handleWANEvent(event);

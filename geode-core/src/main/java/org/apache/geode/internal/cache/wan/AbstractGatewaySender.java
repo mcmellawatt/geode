@@ -895,13 +895,14 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       if (!isRunning()) {
         if (this.isPrimary()) {
           tmpDroppedEvents.add(clonedEvent);
-          if (isDebugEnabled) {
-            logger.debug("add to tmpDroppedEvents for evnet {}", clonedEvent);
-          }
+          // if (isDebugEnabled) {
+          logger.info("RYGUY: add to tmpDroppedEvents for evnet {}", clonedEvent.hashCode());
+          // }
         }
-        if (isDebugEnabled) {
-          logger.debug("Returning back without putting into the gateway sender queue:" + event);
-        }
+        // if (isDebugEnabled) {
+        logger.info("RYGUY: Returning back without putting into the gateway sender queue:"
+            + event.hashCode());
+        // }
         return;
       }
 
@@ -917,6 +918,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       // other GatewaEventFilter. Do we need to get rid of this filter. Cheetah is
       // not considering this filter
       if (!this.filter.enqueueEvent(event)) {
+        logger.info("RYGUY: Failed to enqueue event to filter.  Event: " + event.hashCode());
         stats.incEventsFiltered();
         return;
       }
@@ -1006,9 +1008,10 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
         // If this gateway is not running, return
         // The sender may have stopped, after we have checked the status in the beginning.
         if (!isRunning()) {
-          if (isDebugEnabled) {
-            logger.debug("Returning back without putting into the gateway sender queue:" + event);
-          }
+          // if (isDebugEnabled) {
+          logger.debug("RYGUY: Returning back without putting into the gateway sender queue: "
+              + event.hashCode());
+          // }
           if (this.eventProcessor != null) {
             this.eventProcessor.registerEventDroppedInPrimaryQueue(event);
           }
@@ -1049,7 +1052,12 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       }
     } finally {
       if (freeClonedEvent) {
+        logger
+            .info("RYGUY: Cloned event is being freed for event. Event: " + clonedEvent.hashCode());
         clonedEvent.release(); // fix for bug 48035
+      } else {
+        logger.info(
+            "RYGUY: Cloned event was added to temporary queue. Event: " + clonedEvent.hashCode());
       }
     }
   }

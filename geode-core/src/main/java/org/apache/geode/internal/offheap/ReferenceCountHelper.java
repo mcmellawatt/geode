@@ -18,7 +18,10 @@ package org.apache.geode.internal.offheap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.logging.log4j.Logger;
+
 import org.apache.geode.distributed.internal.DistributionConfig;
+import org.apache.geode.internal.logging.LogService;
 
 /**
  * This class provides static methods to help debug off-heap reference count problems. To enable
@@ -33,7 +36,9 @@ public class ReferenceCountHelper {
       DistributionConfig.GEMFIRE_PREFIX + "trackOffHeapFreedRefCounts";
 
   private static final ReferenceCountHelperImpl inst = new ReferenceCountHelperImpl(
-      Boolean.getBoolean(TRACK_OFFHEAP_REFERENCES), Boolean.getBoolean(TRACK_OFFHEAP_FREES));
+      true, Boolean.getBoolean(TRACK_OFFHEAP_FREES));
+
+  private static final Logger logger = LogService.getLogger();
 
   /* Do not allow any instances */
   private ReferenceCountHelper() {}
@@ -107,6 +112,14 @@ public class ReferenceCountHelper {
    * Used internally to report that a reference count has changed.
    */
   static void refCountChanged(Long address, boolean decRefCount, int rc) {
+    if (decRefCount) {
+      logger.info("RYGUY: Decrementing ref count for " + Long.toHexString(address) + "; rc=" + rc,
+          new Exception());
+    } else {
+      logger.info("RYGUY: Incrementing ref count for " + Long.toHexString(address) + "; rc=" + rc,
+          new Exception());
+    }
+
     getInstance().refCountChanged(address, decRefCount, rc);
   }
 

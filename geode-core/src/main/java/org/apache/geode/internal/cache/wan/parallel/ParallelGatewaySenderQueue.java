@@ -674,13 +674,13 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
     } else {
       regionPath = ColocationHelper.getLeaderRegion((PartitionedRegion) region).getFullPath();
     }
-    if (isDebugEnabled) {
-      logger.debug("Put is for the region {}", region);
-    }
+    // if (isDebugEnabled) {
+    logger.info("RYGUY: Put is for the region {}", region);
+    // }
     if (!this.userRegionNameToshadowPRMap.containsKey(regionPath)) {
-      if (isDebugEnabled) {
-        logger.debug("The userRegionNameToshadowPRMap is {}", userRegionNameToshadowPRMap);
-      }
+      // if (isDebugEnabled) {
+      logger.info("RYGUY: The userRegionNameToshadowPRMap is {}", userRegionNameToshadowPRMap);
+      // }
       logger.warn(LocalizedMessage
           .create(LocalizedStrings.NOT_QUEUING_AS_USERPR_IS_NOT_YET_CONFIGURED, value));
       // does not put into queue
@@ -697,10 +697,10 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
         // In case of parallel we don't expect
         // the key to be not set. If it is the case then the event must be coming
         // through listener, so return.
-        if (isDebugEnabled) {
-          logger.debug("ParallelGatewaySenderOrderedQueue not putting key {} : Value : {}", key,
-              value);
-        }
+        // if (isDebugEnabled) {
+        logger.info("RYGUY: ParallelGatewaySenderOrderedQueue not putting key {} : Value : {}", key,
+            value.hashCode());
+        // }
         // does not put into queue
         return false;
       }
@@ -708,9 +708,10 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
       key = value.getEventId();
     }
 
-    if (isDebugEnabled) {
-      logger.debug("ParallelGatewaySenderOrderedQueue putting key {} : Value : {}", key, value);
-    }
+    // if (isDebugEnabled) {
+    logger.info("RYGUY: ParallelGatewaySenderOrderedQueue putting key {} : Value : {}", key,
+        value.hashCode());
+    // }
     AbstractBucketRegionQueue brq =
         (AbstractBucketRegionQueue) prQ.getDataStore().getLocalBucketById(bucketId);
 
@@ -726,11 +727,11 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
                   + prQ.getBucketName(bucketId);
 
           brq = (AbstractBucketRegionQueue) prQ.getCache().getRegionByPath(bucketFullPath);
-          if (isDebugEnabled) {
-            logger.debug(
-                "ParallelGatewaySenderOrderedQueue : The bucket in the cache is bucketRegionName : {} bucket : {}",
-                bucketFullPath, brq);
-          }
+          // if (isDebugEnabled) {
+          logger.info(
+              "RYGUY: ParallelGatewaySenderOrderedQueue : The bucket in the cache is bucketRegionName : {} bucket : {}",
+              bucketFullPath, brq);
+          // }
           if (brq != null) {
             brq.getInitializationLock().readLock().lock();
             try {
@@ -753,11 +754,11 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
             // In that case we don't want to store this event.
             if (((PartitionedRegion) prQ.getColocatedWithRegion()).getRegionAdvisor()
                 .getBucketAdvisor(bucketId).getShadowBucketDestroyed()) {
-              if (isDebugEnabled) {
-                logger.debug(
-                    "ParallelGatewaySenderOrderedQueue not putting key {} : Value : {} as shadowPR bucket is destroyed.",
-                    key, value);
-              }
+              // if (isDebugEnabled) {
+              logger.info(
+                  "RYGUY: ParallelGatewaySenderOrderedQueue not putting key {} : Value : {} as shadowPR bucket is destroyed.",
+                  key, value.hashCode());
+              // }
               // does not put onto the queue
             } else {
               /*
@@ -787,11 +788,11 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
                   tempQueue.add(value);
                   putDone = true;
                   // For debugging purpose.
-                  if (isDebugEnabled) {
-                    logger.debug(
-                        "The value {} is enqueued to the tempQueue for the BucketRegionQueue.",
-                        value);
-                  }
+                  // if (isDebugEnabled) {
+                  logger.info(
+                      "RYGUY: The value {} is enqueued to the tempQueue for the BucketRegionQueue.",
+                      value.hashCode());
+                  // }
                 }
               }
             }
@@ -815,11 +816,11 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
           putIntoBucketRegionQueue(brq, key, value);
           putDone = true;
         } else {
-          if (isDebugEnabled) {
-            logger.debug(
-                "ParallelGatewaySenderOrderedQueue not putting key {} : Value : {} as shadowPR bucket is destroyed.",
-                key, value);
-          }
+          // if (isDebugEnabled) {
+          logger.info(
+              "RYGUY: ParallelGatewaySenderOrderedQueue not putting key {} : Value : {} as shadowPR bucket is destroyed.",
+              key, value.hashCode());
+          // }
           // does not put onto the queue
         }
       }
@@ -861,19 +862,24 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
         // need to find out from hcih revision this code came
       }
     } catch (BucketNotFoundException e) {
-      if (logger.isDebugEnabled()) {
-        logger.debug("For bucket {} the current bucket redundancy is {}", brq.getId(),
-            brq.getPartitionedRegion().getRegionAdvisor().getBucketAdvisor(brq.getId())
-                .getBucketRedundancy());
-      }
+      // if (logger.isDebugEnabled()) {
+      logger.info("RYGUY: For bucket {} the current bucket redundancy is {}. Value: {}",
+          brq.getId(),
+          brq.getPartitionedRegion().getRegionAdvisor().getBucketAdvisor(brq.getId())
+              .getBucketRedundancy(),
+          value.hashCode());
+      // }
     } catch (ForceReattemptException e) {
-      if (logger.isDebugEnabled()) {
-        logger.debug(
-            "getInitializedBucketForId: Got ForceReattemptException for {} for bucket = {}", this,
-            brq.getId());
-      }
+      // if (logger.isDebugEnabled()) {
+      logger.info(
+          "RYGUY: getInitializedBucketForId: Got ForceReattemptException for {} for bucket = {}, Value: {}",
+          this,
+          brq.getId(), value.hashCode());
+      // }
     } finally {
       if (!addedValueToQueue) {
+        logger.info("RYGUY: Failed to put into bucket region queue, so releasing. Value: "
+            + value.hashCode());
         value.release();
       }
     }
@@ -1036,6 +1042,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
         }
       } finally {
         try {
+          logger.info("RYGUY: Releasing after removing from queue.  Event: " + event.hashCode());
           event.release();
         } catch (IllegalStateException e) {
           logger.error("Exception caught and logged.  The thread will continue running", e);

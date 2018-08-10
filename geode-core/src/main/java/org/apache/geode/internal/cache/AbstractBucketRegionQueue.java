@@ -210,6 +210,7 @@ public abstract class AbstractBucketRegionQueue extends BucketRegion {
         throw new ForceReattemptException("Bucket moved while destroying key " + key, rde);
       }
     } finally {
+      logger.info("RYGUY: destroyKey AbstractBucketRegionQueue. Event: " + event.hashCode());
       event.release();
     }
 
@@ -336,10 +337,13 @@ public abstract class AbstractBucketRegionQueue extends BucketRegion {
           logger.debug("Key : ----> {}", event.getKey());
         }
       } else {
+        logger.info("RYGUY: virtualPut failed for event. Releasing new value: " + event.hashCode());
         GatewaySenderEventImpl.release(event.getRawNewValue());
       }
       return success;
     } finally {
+      logger
+          .info("RYGUY: virtualPut succeeded for event.  Releasing old value: " + event.hashCode());
       GatewaySenderEventImpl.release(event.getRawOldValue());
     }
 
@@ -352,6 +356,7 @@ public abstract class AbstractBucketRegionQueue extends BucketRegion {
     try {
       super.basicDestroy(event, cacheWrite, expectedOldValue);
     } finally {
+      logger.info("RYGUY: basicDestroy AbstractBucketRegionQueue. Event: " + event.hashCode());
       GatewaySenderEventImpl.release(event.getRawOldValue());
     }
   }
@@ -409,9 +414,10 @@ public abstract class AbstractBucketRegionQueue extends BucketRegion {
     // value, null);
     event.copyOffHeapToHeap();
 
-    if (logger.isDebugEnabled()) {
-      logger.debug("Value : {}", event.getRawNewValue());
-    }
+    // if (logger.isDebugEnabled()) {
+    logger.info("RYGUY: Created EntryEventImpl in addToQueue. Value:" + value.hashCode()
+        + "; Event: " + event.hashCode());
+    // }
     waitIfQueueFull();
 
     try {
@@ -420,6 +426,8 @@ public abstract class AbstractBucketRegionQueue extends BucketRegion {
 
       checkReadiness();
     } catch (RegionDestroyedException rde) {
+      logger.info("RYGUY: RegionDestroyedException encountered. Value: " + value.hashCode()
+          + "; Event: " + event.hashCode());
       // this can now happen due to a re-balance removing a bucket
       getPartitionedRegion().checkReadiness();
       if (isBucketDestroyed()) {
@@ -427,6 +435,8 @@ public abstract class AbstractBucketRegionQueue extends BucketRegion {
       }
     } finally {
       if (!didPut) {
+        logger.info(
+            "RYGUY: Put failed for value: " + value.hashCode() + "; Event: " + event.hashCode());
         GatewaySenderEventImpl.release(value);
       }
     }
@@ -435,6 +445,8 @@ public abstract class AbstractBucketRegionQueue extends BucketRegion {
     // if yes, then remove it from there and destroy the key from BucketRegionQueue.
     // This is to reduce the window of race condition described by Darrel in #49196.
     if (failedBatchRemovalMessageKeys.remove(key) && didPut) {
+      logger.info("RYGUY: Race condition hack for value: " + value.hashCode() + "; Event: "
+          + event.hashCode());
       destroyKey(key);
       didPut = false;
     } else {

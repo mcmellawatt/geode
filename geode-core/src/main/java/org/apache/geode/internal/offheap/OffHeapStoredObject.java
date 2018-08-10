@@ -18,6 +18,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+import org.apache.logging.log4j.Logger;
+
 import org.apache.geode.cache.Region;
 import org.apache.geode.internal.DSCODE;
 import org.apache.geode.internal.HeapDataOutputStream;
@@ -27,6 +29,7 @@ import org.apache.geode.internal.cache.EntryBits;
 import org.apache.geode.internal.cache.EntryEventImpl;
 import org.apache.geode.internal.cache.RegionEntry;
 import org.apache.geode.internal.cache.RegionEntryContext;
+import org.apache.geode.internal.logging.LogService;
 import org.apache.geode.internal.offheap.annotations.Unretained;
 
 /**
@@ -82,6 +85,8 @@ public class OffHeapStoredObject extends AbstractStoredObject
   static final int MAX_REF_COUNT = 0xFFFF;
   static final long FILL_PATTERN = 0x3c3c3c3c3c3c3c3cL;
   static final byte FILL_BYTE = 0x3c;
+
+  private static final Logger logger = LogService.getLogger();
 
   protected OffHeapStoredObject(long memoryAddress, int chunkSize) {
     MemoryAllocatorImpl.validateAddressAndSize(memoryAddress, chunkSize);
@@ -701,6 +706,9 @@ public class OffHeapStoredObject extends AbstractStoredObject
       if (freeListManager == null) {
         freeListManager = MemoryAllocatorImpl.getAllocator().getFreeListManager();
       }
+
+      logger.info("RYGUY: Freeing address " + Long.toHexString(memAddr), new Exception());
+
       freeListManager.free(memAddr);
     } else {
       if (ReferenceCountHelper.trackReferenceCounts()) {

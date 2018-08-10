@@ -301,6 +301,9 @@ public class MemoryAllocatorImpl implements MemoryAllocator {
     if (ReferenceCountHelper.trackReferenceCounts()) {
       ReferenceCountHelper.refCountChanged(result.getAddress(), false, 1);
     }
+
+    logger.info("RYGUY: Allocating " + Long.toHexString(result.getAddress()), new Exception());
+
     return result;
   }
 

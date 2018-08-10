@@ -354,14 +354,15 @@ public class BucketRegionQueue extends AbstractBucketRegionQueue {
     try {
       super.basicDestroy(event, cacheWrite, expectedOldValue);
     } finally {
+      logger.info("RYGUY: basicDestroy BasicRegionQueue destroying event: " + event.hashCode());
       GatewaySenderEventImpl.release(event.getRawOldValue());
     }
 
     // Primary buckets should already remove the key while peeking
     if (!this.getBucketAdvisor().isPrimary()) {
-      if (logger.isDebugEnabled()) {
-        logger.debug(" removing the key {} from eventSeqNumQueue", event.getKey());
-      }
+      // if (logger.isDebugEnabled()) {
+      logger.info("RYGUY: Removing the key " + event.hashCode() + " from eventSeqNumQueue");
+      // }
       this.eventSeqNumDeque.remove(event.getKey());
     }
   }
@@ -568,6 +569,7 @@ public class BucketRegionQueue extends AbstractBucketRegionQueue {
         throw new ForceReattemptException("Bucket moved while destroying key " + key, rde);
       }
     } finally {
+      logger.info("RYGUY: destroyKey BucketRegionQueue on event " + event.hashCode());
       event.release();
     }
 
