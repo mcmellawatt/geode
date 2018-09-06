@@ -458,7 +458,8 @@ public class AcceptorImpl implements Acceptor, Runnable, CommBufferPool {
             this.serverSock.bind(new InetSocketAddress(getBindAddress(), port), backLog);
             break;
           } catch (SocketException b) {
-            if (!treatAsBindException(b) || System.currentTimeMillis() > tilt) {
+            if (isGatewayReceiver || !treatAsBindException(b)
+                || System.currentTimeMillis() > tilt) {
               throw b;
             }
           }
@@ -488,7 +489,8 @@ public class AcceptorImpl implements Acceptor, Runnable, CommBufferPool {
                 this.gatewayTransportFilters, socketBufferSize);
             break;
           } catch (SocketException e) {
-            if (!treatAsBindException(e) || System.currentTimeMillis() > tilt) {
+            if (isGatewayReceiver || !treatAsBindException(e)
+                || System.currentTimeMillis() > tilt) {
               throw e;
             }
           }
