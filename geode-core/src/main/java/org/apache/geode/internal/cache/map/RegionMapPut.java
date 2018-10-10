@@ -31,6 +31,7 @@ import org.apache.geode.internal.cache.entries.AbstractRegionEntry;
 import org.apache.geode.internal.cache.versions.ConcurrentCacheModificationException;
 import org.apache.geode.internal.cache.versions.VersionTag;
 import org.apache.geode.internal.cache.wan.GatewaySenderEventImpl;
+import org.apache.geode.internal.logging.LogService;
 import org.apache.geode.internal.offheap.OffHeapHelper;
 import org.apache.geode.internal.offheap.ReferenceCountHelper;
 import org.apache.geode.internal.offheap.annotations.Released;
@@ -247,6 +248,20 @@ public class RegionMapPut extends AbstractRegionMapPut {
       setClearOccurred(true);
     } catch (ConcurrentCacheModificationException ccme) {
       final EntryEventImpl event = getEvent();
+
+      LogService.getLogger().debug("RYGUY: RegionMapPut CCME caught for event " + event);
+
+      StackTraceElement[] elements = Thread.currentThread().getStackTrace();
+      StringBuilder stringBuilder = new StringBuilder();
+
+      for (int i = 1; i < elements.length; i++) {
+        StackTraceElement s = elements[i];
+        stringBuilder.append("\n\tat " + s.getClassName() + "." + s.getMethodName()
+            + "(" + s.getFileName() + ":" + s.getLineNumber() + ")");
+      }
+
+      LogService.getLogger().debug(stringBuilder.toString());
+
       VersionTag tag = event.getVersionTag();
       if (tag != null && tag.isTimeStampUpdated()) {
         getOwner().notifyTimestampsToGateways(event);

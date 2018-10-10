@@ -560,6 +560,8 @@ public abstract class AbstractRegionMap
    */
   @Override
   public void processVersionTag(RegionEntry regionEntry, EntryEventImpl event) {
+    logger.debug("RYGUY: Processing version tag for " + event);
+
     if (regionEntry.getVersionStamp() != null) {
       regionEntry.getVersionStamp().processVersionTag(event);
 
@@ -580,6 +582,8 @@ public abstract class AbstractRegionMap
 
   private void processVersionTagForGII(RegionEntry re, LocalRegion owner, VersionTag entryVersion,
       boolean isTombstone, InternalDistributedMember sender, boolean checkConflicts) {
+    logger.debug("RYGUY: Processing version tag for GII for key " + re.getKey() + "; value: "
+        + re.getValue());
 
     re.getVersionStamp().processVersionTag(_getOwner(), entryVersion, isTombstone, false,
         owner.getMyId(), sender, checkConflicts);

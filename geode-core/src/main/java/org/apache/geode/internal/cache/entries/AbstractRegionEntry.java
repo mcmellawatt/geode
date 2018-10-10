@@ -73,7 +73,6 @@ import org.apache.geode.internal.cache.versions.VersionTag;
 import org.apache.geode.internal.cache.wan.GatewaySenderEventImpl;
 import org.apache.geode.internal.lang.StringUtils;
 import org.apache.geode.internal.logging.LogService;
-import org.apache.geode.internal.logging.log4j.LogMarker;
 import org.apache.geode.internal.offheap.MemoryAllocator;
 import org.apache.geode.internal.offheap.MemoryAllocatorImpl;
 import org.apache.geode.internal.offheap.OffHeapHelper;
@@ -1725,7 +1724,7 @@ public abstract class AbstractRegionEntry implements HashRegionEntry<Object, Obj
 
         if (stampDsId != 0 && stampDsId != tagDsId && stampDsId != -1) {
           StringBuilder verbose = null;
-          if (logger.isTraceEnabled(LogMarker.TOMBSTONE_VERBOSE)) {
+          if (logger.isDebugEnabled()) {
             verbose = new StringBuilder();
             verbose.append("processing tag for key ").append(getKey()).append(", stamp=")
                 .append(stamp.asVersionTag()).append(", tag=").append(tag);
@@ -1736,7 +1735,7 @@ public abstract class AbstractRegionEntry implements HashRegionEntry<Object, Obj
               && tag.getDistributedSystemId() >= stamp.getDistributedSystemId()))) {
             if (verbose != null) {
               verbose.append(" - allowing event");
-              logger.trace(LogMarker.TOMBSTONE_VERBOSE, verbose);
+              logger.debug(verbose);
             }
             // Update the stamp with event's version information.
             applyVersionTag(r, stamp, tag, originator);
@@ -1746,10 +1745,11 @@ public abstract class AbstractRegionEntry implements HashRegionEntry<Object, Obj
           if (stampTime > 0) {
             if (verbose != null) {
               verbose.append(" - disallowing event");
-              logger.trace(LogMarker.TOMBSTONE_VERBOSE, verbose);
+              logger.debug(verbose);
             }
             r.getCachePerfStats().incConflatedEventsCount();
             persistConflictingTag(r, tag);
+            logger.info("RYGUY: Non-WAN conflicting event found for " + cacheEvent);
             throw new ConcurrentCacheModificationException("conflicting event detected");
           }
         }
@@ -1801,7 +1801,7 @@ public abstract class AbstractRegionEntry implements HashRegionEntry<Object, Obj
       VersionStamp stamp = getVersionStamp();
 
       StringBuilder verbose = null;
-      if (logger.isTraceEnabled(LogMarker.TOMBSTONE_VERBOSE)) {
+      if (logger.isDebugEnabled()) {
         VersionTag stampTag = stamp.asVersionTag();
         if (stampTag.hasValidVersion() && checkForConflict) {
           // only be verbose here if there's a possibility we might reject the operation
@@ -1841,7 +1841,7 @@ public abstract class AbstractRegionEntry implements HashRegionEntry<Object, Obj
         throw e;
       } finally {
         if (verbose != null) {
-          logger.trace(LogMarker.TOMBSTONE_VERBOSE, verbose);
+          logger.debug(verbose);
         }
       }
 
@@ -2136,6 +2136,7 @@ public abstract class AbstractRegionEntry implements HashRegionEntry<Object, Obj
           if (isDebugEnabled) {
             logger.debug("conflict resolver rejected the event for {}", event.getKey());
           }
+          logger.info("RYGUY: Other WAN conflict detected " + event);
           throw new ConcurrentCacheModificationException(
               "WAN conflict resolver rejected the operation");
         }
@@ -2168,6 +2169,7 @@ public abstract class AbstractRegionEntry implements HashRegionEntry<Object, Obj
     if (isDebugEnabled) {
       logger.debug("disallowing event for {}", event.getKey());
     }
+    logger.info("WAN conflicting event detected " + event);
     throw new ConcurrentCacheModificationException("conflicting WAN event detected");
   }
 

@@ -5408,6 +5408,9 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
           basicInvalidate(event, true, forceNewEntry);
           if (event.isConcurrencyConflict()) {
             // bug #45520 - we must throw this for the CacheClientUpdater
+            logger.info(
+                "RYGUY: basicBridgeClientInvalidate - throwing ConcurrentCacheModificationException for "
+                    + event);
             throw new ConcurrentCacheModificationException();
           }
         } else {
@@ -5458,6 +5461,9 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
           basicDestroy(event, false, null);
           if (event.isConcurrencyConflict()) {
             // bug #45520 - we must throw an exception for CacheClientUpdater
+            logger.info(
+                "RYGUY: basicBridgeClientDestroy - throwing ConcurrentCacheModificationException for "
+                    + event);
             throw new ConcurrentCacheModificationException();
           }
         } else {
@@ -5903,6 +5909,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
    */
   @Override
   public void notifyTimestampsToGateways(EntryEventImpl event) {
+    logger.debug("RYGUY: Updating timestamp for gateway event " + event);
     // Create updateTimeStampEvent from event.
     VersionTagHolder updateTimeStampEvent = new VersionTagHolder(event.getVersionTag());
     updateTimeStampEvent.setOperation(Operation.UPDATE_VERSION_STAMP);
