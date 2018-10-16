@@ -412,6 +412,9 @@ public class QueryMonitorDUnitTest {
   }
 
   private static class QueryTimeoutHook implements DefaultQuery.TestHook {
+    /**
+     * Delay query execution long enough for the QueryMonitor to mark the query as cancelled.
+     */
     public void doTestHook(int spot, DefaultQuery query) {
       if (spot != 6) {
         return;
@@ -420,7 +423,17 @@ public class QueryMonitorDUnitTest {
         return;
       }
 
-      Awaitility.await().pollDelay(5, TimeUnit.MILLISECONDS).until(() -> query.isCanceled());
+      /*
+       * The atMost() value was chosen to account for situations where QueryMonitor (thread)
+       * gets delayed by long GC pauses. Values around 10s resulted in false-positive test failures.
+       *
+       * The pollDelay() value was chosen to be larger than the
+       * GemFireCacheImpl.MAX_QUERY_EXECUTION_TIME (system property) value,
+       * set during test initialization.
+       */
+      Awaitility.await("stall the query execution so that it gets cancelled")
+          .atMost(2, TimeUnit.MINUTES).pollDelay(10, TimeUnit.MILLISECONDS)
+          .until(() -> query.isCanceled());
     }
   }
 
