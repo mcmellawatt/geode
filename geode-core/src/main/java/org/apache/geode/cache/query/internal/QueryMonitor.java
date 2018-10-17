@@ -175,7 +175,10 @@ public class QueryMonitor implements Runnable {
         queryTask = (QueryThreadTask) queryThreads.peek();
         if (queryTask == null) {
           synchronized (queryThreads) {
-            queryThreads.wait();
+            queryTask = (QueryThreadTask) queryThreads.peek();
+            if (queryTask == null) {
+              queryThreads.wait();
+            }
           }
           continue;
         }
