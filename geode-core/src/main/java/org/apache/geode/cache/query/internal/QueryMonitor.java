@@ -34,7 +34,7 @@ import org.apache.geode.internal.logging.LogService;
  * {@link QueryMonitor} class, monitors the query execution time. In typical usage, the maximum
  * query execution time might be set (upon construction) via the system property
  * {@link GemFireCacheImpl#MAX_QUERY_EXECUTION_TIME}. The number of threads allocated to query
- * monitoring is determined by the instance of {@link ScheduledThreadPoolExecutorFactory} passed
+ * monitoring is determined by the instance of {@link ScheduledThreadPoolExecutor} passed
  * to the constructor.
  *
  * This class supports a low-memory mode, established by {@link #setLowMemory(boolean, long)}. \
@@ -68,9 +68,9 @@ public class QueryMonitor {
 
   private final long defaultMaxQueryExecutionTime;
 
-  private final ScheduledThreadPoolExecutorFactory executorFactory;
+  private volatile ProxyScheduler proxyScheduler;
 
-  private volatile ScheduledThreadPoolExecutor executor;
+  private final ScheduledThreadPoolExecutor scheduledThreadPoolExecutor;
 
   private volatile boolean cancelingDueToLowMemory;
 
@@ -78,15 +78,10 @@ public class QueryMonitor {
 
   private static volatile long LOW_MEMORY_USED_BYTES = 0;
 
-  @FunctionalInterface
-  public interface ScheduledThreadPoolExecutorFactory {
-    ScheduledThreadPoolExecutor create();
-  }
-
   /**
-   * This class will call {@link ScheduledThreadPoolExecutor#setRemoveOnCancelPolicy(boolean)}
-   * on {@link ScheduledThreadPoolExecutor} instances returned by the
-   * {@link ScheduledThreadPoolExecutorFactory} to set that property to {@code true}.
+   * This class will set the cancel policy by calling
+   * {@link ScheduledThreadPoolExecutor#setRemoveOnCancelPolicy(boolean)} on the
+   * passed in {@link ScheduledThreadPoolExecutor}.
    *
    * The default behavior of a {@link ScheduledThreadPoolExecutor} is to keep canceled
    * tasks in the queue, relying on the timeout processing loop to remove them
@@ -97,25 +92,24 @@ public class QueryMonitor {
    * Setting the remove-on-cancel-policy to {@code true} changes that behavior so tasks are
    * removed immediately upon cancelation (via {@link #stopMonitoringQueryThread(DefaultQuery)}).
    *
-   * @param executorFactory is called to construct the initial executor. It's called subsequently
-   *        every time the QueryMonitor moves out of the low-memory state, to create a new executor.
+   * @param executor is the executor which runs the scheduled cancelation tasks
    * @param cache is interrogated via {@link InternalCache#isQueryMonitorDisabledForLowMemory} at
    *        each low-memory state change
    * @param defaultMaxQueryExecutionTime is the maximum time, in milliseconds, that any query
    *        is allowed to run
    */
-  public QueryMonitor(final ScheduledThreadPoolExecutorFactory executorFactory,
+  public QueryMonitor(final ScheduledThreadPoolExecutor executor,
       final InternalCache cache,
       final long defaultMaxQueryExecutionTime) {
-    Objects.requireNonNull(executorFactory);
+    Objects.requireNonNull(executor);
     Objects.requireNonNull(cache);
 
     this.cache = cache;
     this.defaultMaxQueryExecutionTime = defaultMaxQueryExecutionTime;
 
-    this.executorFactory = executorFactory;
-    this.executor = executorFactory.create();
-    this.executor.setRemoveOnCancelPolicy(true);
+    this.scheduledThreadPoolExecutor = executor;
+    this.scheduledThreadPoolExecutor.setRemoveOnCancelPolicy(true);
+    this.proxyScheduler = new ScheduledThreadPoolProxyScheduler(executor);
   }
 
   /**
@@ -141,12 +135,6 @@ public class QueryMonitor {
     // cq query is not monitored
     if (query.isCqQuery()) {
       return;
-    }
-
-    if (LOW_MEMORY) {
-      final QueryExecutionLowMemoryException lowMemoryException = createLowMemoryException();
-      query.setQueryCanceledException(lowMemoryException);
-      throw lowMemoryException;
     }
 
     query.setCancelationTask(scheduleCancelationTask(query, maxQueryExecutionTime));
@@ -187,7 +175,7 @@ public class QueryMonitor {
    * Stops query monitoring. Makes this {@link QueryMonitor} unusable for further monitoring.
    */
   public void stopMonitoring() {
-    executor.shutdownNow();
+    scheduledThreadPoolExecutor.shutdownNow();
   }
 
   /**
@@ -213,12 +201,7 @@ public class QueryMonitor {
         if (isLowMemory) {
           cancelAllQueriesDueToMemory();
         } else {
-          /*
-           * Executor was shut down and made permanently unusable when we went into
-           * the low-memory state. We have to make a new executor now that we're monitoring
-           * queries again.
-           */
-          executor = executorFactory.create();
+          proxyScheduler = new ScheduledThreadPoolProxyScheduler(scheduledThreadPoolExecutor);
         }
       }
       QueryMonitor.LOW_MEMORY = isLowMemory;
@@ -241,14 +224,16 @@ public class QueryMonitor {
 
     try {
       /*
-       * It's tempting to try to process the list of tasks returned from shutdownNow().
-       * Unfortunately, that call leaves the executor in a state that causes the task's
-       * run() to cancel the task, instead of actually running it. By calling shutdown()
-       * we block new task additions and put the executor in a state that allows the
-       * task's run() to actually run the task logic.
+       * Replace the proxyScheduler with one that throws low memory
+       * exceptions when scheduling is attempted.
        */
-      executor.shutdown(); // executor won't accept new work ever again
-      final BlockingQueue<Runnable> expirationTaskQueue = executor.getQueue();
+      proxyScheduler = new LowMemoryProxyScheduler();
+
+      /*
+       * Now we can safely iterate the scheduledThreadPoolExecutor's work queue
+       * and run all the cancellation tasks.
+       */
+      final BlockingQueue<Runnable> expirationTaskQueue = scheduledThreadPoolExecutor.getQueue();
       for (final Runnable cancelationTask : expirationTaskQueue) {
         cancelationTask.run();
       }
@@ -266,7 +251,7 @@ public class QueryMonitor {
     final AtomicBoolean queryCanceledThreadLocal =
         DefaultQuery.queryCanceled.get();
 
-    return executor.schedule(() -> {
+    return proxyScheduler.schedule(query, () -> {
       final CacheRuntimeException exception = cancelingDueToLowMemory ? createLowMemoryException()
           : createExpirationException(timeLimitMillis);
 
@@ -297,8 +282,37 @@ public class QueryMonitor {
     final Thread queryThread = Thread.currentThread();
     logger.debug(
         message + " QueryMonitor size is: {}, Thread (id): {}, Query: {}, Thread is : {}",
-        executor.getQueue().size(), queryThread.getId(), query.getQueryString(),
+        scheduledThreadPoolExecutor.getQueue().size(), queryThread.getId(), query.getQueryString(),
         queryThread);
   }
 
+  private interface ProxyScheduler {
+    ScheduledFuture<?> schedule(DefaultQuery query, Runnable command,
+        long delay,
+        TimeUnit unit);
+  }
+
+  private class ScheduledThreadPoolProxyScheduler implements ProxyScheduler {
+    ScheduledThreadPoolExecutor executor;
+
+    ScheduledThreadPoolProxyScheduler(ScheduledThreadPoolExecutor executor) {
+      this.executor = executor;
+    }
+
+    @Override
+    public ScheduledFuture<?> schedule(DefaultQuery query, Runnable command, long delay,
+        TimeUnit unit) {
+      return executor.schedule(command, delay, unit);
+    }
+  }
+
+  private class LowMemoryProxyScheduler implements ProxyScheduler {
+    @Override
+    public ScheduledFuture<?> schedule(DefaultQuery query, Runnable command, long delay,
+        TimeUnit unit) {
+      final QueryExecutionLowMemoryException lowMemoryException = createLowMemoryException();
+      query.setQueryCanceledException(lowMemoryException);
+      throw lowMemoryException;
+    }
+  }
 }

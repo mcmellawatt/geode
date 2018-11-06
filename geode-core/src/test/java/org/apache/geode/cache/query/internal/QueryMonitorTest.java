@@ -55,7 +55,7 @@ public class QueryMonitorTest {
   public void setUp() {
     scheduledThreadPoolExecutor = mock(ScheduledThreadPoolExecutor.class);
     when(scheduledThreadPoolExecutor.getQueue()).thenReturn(new ArrayBlockingQueue<>(1));
-    monitor = new QueryMonitor(() -> scheduledThreadPoolExecutor, mock(InternalCache.class),
+    monitor = new QueryMonitor(scheduledThreadPoolExecutor, mock(InternalCache.class),
         max_execution_time);
     captor = ArgumentCaptor.forClass(Runnable.class);
   }

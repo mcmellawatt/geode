@@ -66,7 +66,7 @@ public class QueryMonitorIntegrationTest {
 
     try {
       queryMonitor = new QueryMonitor(
-          () -> scheduledThreadPoolExecutor,
+          scheduledThreadPoolExecutor,
           cache,
           NEVER_EXPIRE_MILLIS);
 
@@ -95,7 +95,7 @@ public class QueryMonitorIntegrationTest {
   public void monitorQueryThreadCancelsLongRunningQueriesAndSetsExceptionAndThrowsException() {
 
     QueryMonitor queryMonitor = new QueryMonitor(
-        () -> new ScheduledThreadPoolExecutor(1),
+        new ScheduledThreadPoolExecutor(1),
         cache,
         EXPIRE_QUICK_MILLIS);
 

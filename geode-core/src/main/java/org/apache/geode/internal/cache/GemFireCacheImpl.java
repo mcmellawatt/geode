@@ -62,7 +62,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -212,7 +211,6 @@ import org.apache.geode.internal.jta.TransactionManagerImpl;
 import org.apache.geode.internal.logging.InternalLogWriter;
 import org.apache.geode.internal.logging.LogService;
 import org.apache.geode.internal.logging.LoggingExecutors;
-import org.apache.geode.internal.logging.LoggingThread;
 import org.apache.geode.internal.monitoring.ThreadsMonitoring;
 import org.apache.geode.internal.net.SocketCreator;
 import org.apache.geode.internal.offheap.MemoryAllocator;
@@ -4468,9 +4466,10 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
           }
 
           this.queryMonitor =
-              new QueryMonitor(() -> (ScheduledThreadPoolExecutor) Executors.newScheduledThreadPool(
-                  QUERY_MONITOR_THREAD_POOL_SIZE,
-                  (runnable) -> new LoggingThread("QueryMonitor Thread", runnable)),
+              new QueryMonitor(
+                  (ScheduledThreadPoolExecutor) LoggingExecutors.newScheduledThreadPool(
+                      "QueryMonitor Thread",
+                      QUERY_MONITOR_THREAD_POOL_SIZE),
                   this,
                   maxTime);
           if (logger.isDebugEnabled()) {
