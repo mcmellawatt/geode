@@ -53,6 +53,8 @@ public class HAContainerMap implements HAContainerWrapper {
   }
 
   public Object putProxy(String haName, CacheClientProxy proxy) {
+    // InternalDistributedSystem.getLoggerI18n().info(LocalizedStrings.DEBUG, "adding proxy for " +
+    // haName + ": " + proxy, new Exception("stack trace"));
     return haRegionNameToProxy.put(haName, proxy);
   }
 
@@ -61,6 +63,8 @@ public class HAContainerMap implements HAContainerWrapper {
   }
 
   public Object removeProxy(String haName) {
+    // InternalDistributedSystem.getLoggerI18n().info(LocalizedStrings.DEBUG, "removing proxy for "
+    // + haName, new Exception("stack trace"));
     return haRegionNameToProxy.remove(haName);
   }
 
@@ -87,10 +91,12 @@ public class HAContainerMap implements HAContainerWrapper {
   }
 
   public boolean containsValue(Object value) {
+    // return map.containsValue(value);
     throw new UnsupportedOperationException("containsValue() not supported.");
   }
 
   public Set entrySet() {
+    // return map.entrySet();
     throw new UnsupportedOperationException("entrySet() not supported.");
   }
 

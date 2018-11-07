@@ -95,7 +95,6 @@ import org.apache.geode.internal.cache.tier.sockets.ClientUpdateMessageImpl.CqNa
 import org.apache.geode.internal.cache.tier.sockets.HAEventWrapper;
 import org.apache.geode.internal.cache.tier.sockets.Handshake;
 import org.apache.geode.internal.logging.LogService;
-import org.apache.geode.internal.logging.LoggingThread;
 import org.apache.geode.internal.logging.log4j.LogMarker;
 import org.apache.geode.internal.util.BlobHelper;
 import org.apache.geode.internal.util.concurrent.StoppableCondition;
@@ -608,20 +607,10 @@ public class HARegionQueue implements RegionQueue {
           logger.debug("{}: adding message to GII queue of size {}: {}", this.regionName,
               giiQueue.size(), object);
         }
-        HAEventWrapper haContainerKey = null;
-
         if (object instanceof HAEventWrapper) {
-          HAEventWrapper wrapper = (HAEventWrapper) object;
-          wrapper.incrementPutInProgressCounter();
-          if (logger.isDebugEnabled()) {
-            logger
-                .debug("Incremented PutInProgressCounter during GII queueing. Event ID hash code: "
-                    + wrapper.hashCode() + "; System ID hash code: "
-                    + System.identityHashCode(wrapper)
-                    + "; Wrapper details: " + wrapper);
-          }
+          // bug #43609 - prevent loss of the message while in the queue
+          putEntryConditionallyIntoHAContainer((HAEventWrapper) object);
         }
-
         this.giiQueue.add(object);
       } else {
         if (logger.isTraceEnabled()) {
@@ -773,21 +762,24 @@ public class HARegionQueue implements RegionQueue {
             }
             if (value instanceof HAEventWrapper) {
               if (((HAEventWrapper) value).getClientUpdateMessage() == null) {
-                if (isDebugEnabled) {
-                  logger.debug(
-                      "{} ATTENTION: found gii queued event with null event message.  Please see bug #44852: {}",
-                      this.regionName, value);
+                // if there is no wrapped message look for it in the HA container map
+                ClientUpdateMessageImpl haContainerMessage =
+                    (ClientUpdateMessageImpl) haContainer.get(value);
+                if (haContainerMessage != null) {
+                  ((HAEventWrapper) value).setClientUpdateMessage(haContainerMessage);
+                } else {
+                  if (isDebugEnabled) {
+                    logger.debug(
+                        "{} ATTENTION: found gii queued event with null event message.  Please see bug #44852: {}",
+                        this.regionName, value);
+                  }
+                  continue;
                 }
-                continue;
               }
             }
-
             basicPut(value);
-
-            // The HAEventWrapper putInProgressCounter must be decremented because it was
-            // incremented when it was queued in giiQueue.
             if (value instanceof HAEventWrapper) {
-              ((HAEventWrapper) value).decrementPutInProgressCounter();
+              decAndRemoveFromHAContainer((HAEventWrapper) value);
             }
           } catch (NoSuchElementException ignore) {
             break;
@@ -966,8 +958,8 @@ public class HARegionQueue implements RegionQueue {
           // ignore, we're done
         } catch (CacheException ce) {
           if (!destroyInProgress) {
-            logger.error("HAREgionQueue::createCacheListner::Exception in the expiry thread",
-                ce);
+            logger.error(
+                "RYGUY: Revert destroyIInProgress error message");
           }
         }
       }
@@ -1042,10 +1034,6 @@ public class HARegionQueue implements RegionQueue {
   void publish(Long position) throws InterruptedException {
     acquireWriteLock();
     try {
-      if (logger.isDebugEnabled()) {
-        logger.debug("Adding position " + position + " to available IDs. Region: " + regionName);
-      }
-
       this.idsAvailable.add(position);
       // Notify the waiting peek threads or take threads of blocking queue
       // A void operation for the non blocking queue operations
@@ -1062,16 +1050,11 @@ public class HARegionQueue implements RegionQueue {
   /**
    * @param position Long value present in the Available IDs map against which Event object is
    *        present in HARegion. This function is directly invoked from the basicInvalidate function
-   *        where
-   *        expiry is aborted if this function returns false
+   *        where expiry is aborted if this function returns false
    * @return boolean true if the position could be removed from the Set
    * @throws InterruptedException *
    */
   public boolean destroyFromAvailableIDs(Long position) throws InterruptedException {
-    if (logger.isDebugEnabled()) {
-      logger.debug("Removing position " + position + " from available IDs. Region: " + regionName);
-    }
-
     boolean removedOK = false;
     acquireWriteLock();
     try {
@@ -1099,11 +1082,6 @@ public class HARegionQueue implements RegionQueue {
    *         specified was removed from the Set
    */
   protected boolean destroyFromAvailableIDsAndRegion(Long position) throws InterruptedException {
-    if (logger.isDebugEnabled()) {
-      logger.debug("Removing position " + position + " from available IDs and region. Region: "
-          + this.regionName);
-    }
-
     boolean removedOK = this.destroyFromAvailableIDs(position);
 
     if (removedOK) {
@@ -1350,8 +1328,8 @@ public class HARegionQueue implements RegionQueue {
           dace.setLastDispatchedIDAndRemoveEvents(removedEvents, lastDispatchedId);
         } catch (CacheException e) {
           // ignore and log
-          logger.error("Exception occurred while trying to set the last dispatched id",
-              e);
+          logger.error(
+              "RYGUY: Revert dace cacheexception thing");
         }
       }
 
@@ -1375,12 +1353,10 @@ public class HARegionQueue implements RegionQueue {
 
   @Override
   public Object peek() throws InterruptedException {
-    if (Thread.interrupted()) {
+    if (Thread.interrupted())
       throw new InterruptedException();
-    }
     Conflatable object = null;
     Long next = null;
-
     while (true) {
       try {
         next = (Long) this.getNextAvailableIDFromList();
@@ -1390,18 +1366,13 @@ public class HARegionQueue implements RegionQueue {
       } catch (TimeoutException ignore) {
         throw new InterruptedException();
       }
-
       object = (Conflatable) this.region.get(next);
-
-      // It is possible for the object to be null if a queue removal
-      // occurred between getting the next available ID and getting the object
-      // from the region. If this happens, on the next iteration of this loop we will
-      // get a different available ID to process
       if (object != null) {
+        // peeked a object, so add the correponding counter to thread-context
         object = (object instanceof HAEventWrapper) ? (Conflatable) this.haContainer.get(object)
             : object;
 
-        if (object != null) {
+        if (object != null) { // Is it possible for object to be null...when?
           List peekedEvents;
           if ((peekedEvents = (List) HARegionQueue.peekedEventsContext.get()) != null) {
             peekedEvents.add(next);
@@ -1719,7 +1690,7 @@ public class HARegionQueue implements RegionQueue {
    * Used for testing purposes only
    *
    */
-  Set getAvailableIds() {
+  Set getAvalaibleIds() {
     acquireReadLock();
     try {
       return Collections.unmodifiableSet(this.idsAvailable);
@@ -1739,8 +1710,7 @@ public class HARegionQueue implements RegionQueue {
    * @param lastDispatched EventID containing the ThreadIdentifier and the last dispatched sequence
    *        Id
    */
-  protected void removeDispatchedEvents(EventID lastDispatched)
-      throws CacheException, InterruptedException {
+  void removeDispatchedEvents(EventID lastDispatched) throws CacheException, InterruptedException {
     ThreadIdentifier ti = getThreadIdentifier(lastDispatched);
     long sequenceID = lastDispatched.getSequenceID();
     // get the DispatchedAndCurrentEvents object for this threadID
@@ -2014,8 +1984,7 @@ public class HARegionQueue implements RegionQueue {
         break;
       default:
         throw new IllegalArgumentException(
-            String.format("haRgnQType can either be BLOCKING ( %s ) or NON BLOCKING ( %s )",
-                new Object[] {BLOCKING_HA_QUEUE, NON_BLOCKING_HA_QUEUE}));
+            "RYGUY: illegalargexception");
     }
     if (!isDurable) {
       Optional<Integer> expiryTime =
@@ -2135,18 +2104,13 @@ public class HARegionQueue implements RegionQueue {
             continue;
           }
           synchronized (entryHaEventWrapper) {
-            if (entryHaEventWrapper == (HAEventWrapper) haContainer.getKey(entryHaEventWrapper)) {
+            if ((HAEventWrapper) haContainer.getKey(entryHaEventWrapper) != null) {
               entryHaEventWrapper.incAndGetReferenceCount();
               addClientCQsAndInterestList(entryMessage, inputHaEventWrapper, haContainer,
                   regionName);
               inputHaEventWrapper.setClientUpdateMessage(null);
               newValueCd =
                   new VMCachedDeserializable(entryHaEventWrapper, newValueCd.getSizeInBytes());
-              if (logger.isDebugEnabled()) {
-                logger.debug("GII Update of Event ID hash code: " + entryHaEventWrapper.hashCode()
-                    + "; System ID hash code: " + System.identityHashCode(entryHaEventWrapper)
-                    + "; Wrapper details: " + entryHaEventWrapper);
-              }
             } else {
               entryHaEventWrapper = null;
             }
@@ -2156,11 +2120,7 @@ public class HARegionQueue implements RegionQueue {
             inputHaEventWrapper.incAndGetReferenceCount();
             inputHaEventWrapper.setHAContainer(haContainer);
             inputHaEventWrapper.setClientUpdateMessage(null);
-            if (logger.isDebugEnabled()) {
-              logger.debug("GII Add of Event ID hash code: " + inputHaEventWrapper.hashCode()
-                  + "; System ID hash code: " + System.identityHashCode(inputHaEventWrapper)
-                  + "; Wrapper details: " + entryHaEventWrapper);
-            }
+            inputHaEventWrapper.setIsRefFromHAContainer(true);
           }
           break;
         }
@@ -2277,8 +2237,7 @@ public class HARegionQueue implements RegionQueue {
                       logFrequency = ccn.getLogFrequency();
                     }
                     if ((this.maxQueueSizeHitCount % logFrequency) == 0) {
-                      logger.warn("Client queue for {} client is full.",
-                          new Object[] {region.getName()});
+                      logger.warn("RYGUY: maxQueueSizeHitcount exception");
                       this.maxQueueSizeHitCount = 0;
                     }
                     ++this.maxQueueSizeHitCount;
@@ -2292,7 +2251,7 @@ public class HARegionQueue implements RegionQueue {
                     // deadlock scenario mentioned in the ticket.
                     reconcilePutPermits();
                     if ((this.maxQueueSizeHitCount % logFrequency) == 1) {
-                      logger.info("Resuming with processing puts ...");
+                      logger.info("RYGUY: Other maxQueueSizeHitCount exception");
                     }
                   } catch (InterruptedException ex) {
                     // TODO: The line below is meaningless. Comment it out later
@@ -2599,8 +2558,7 @@ public class HARegionQueue implements RegionQueue {
           this.durableIDsList = new LinkedHashSet();
           long end = System.currentTimeMillis();
           if ((end - start) > 3000) {
-            logger.warn("Durable client queue initialization took {} ms.",
-                Long.toString(end - start));
+            logger.warn("RYGUY: end - start");
           }
         } finally {
           this.releaseWriteLock();
@@ -2779,8 +2737,8 @@ public class HARegionQueue implements RegionQueue {
               if (checkCancelled()) {
                 break;
               }
-              logger.warn("InterruptedException occurred in QueueRemovalThread  while waiting ",
-                  e);
+              logger.warn(
+                  "RYGUY: run() 1");
               break; // desperation...we must be trying to shut down...?
             } finally {
               // Not particularly important since we're exiting the thread,
@@ -2839,7 +2797,7 @@ public class HARegionQueue implements RegionQueue {
           logger.debug("QueueRemovalThread exiting due to cancellation: ", e);
         }
       } finally {
-        logger.info("The QueueRemovalThread is done.");
+        logger.info("RYGUY: Run two");
       }
     }
 
@@ -2923,7 +2881,7 @@ public class HARegionQueue implements RegionQueue {
         }
       }
       if (this.isAlive()) {
-        logger.warn("QueueRemovalThread ignored cancellation");
+        logger.warn("RYGUY: isAlive()");
       }
     }
   }
@@ -2998,8 +2956,6 @@ public class HARegionQueue implements RegionQueue {
       }
 
       boolean rejected = false;
-      Conflatable eventInHARegion = null;
-
       synchronized (this) {
         if (sequenceID > this.lastSequenceIDPut) {
           if (logger.isTraceEnabled()) {
@@ -3027,12 +2983,11 @@ public class HARegionQueue implements RegionQueue {
         if (lastDispatchedSequenceId == TOKEN_DESTROYED) {
           return false;
         }
-
         if (sequenceID > lastDispatchedSequenceId || owningQueue.puttingGIIDataInQueue) {
           // Insert the object into the Region
           Long position = owningQueue.tailKey.incrementAndGet();
 
-          eventInHARegion = owningQueue.putEventInHARegion(event, position);
+          owningQueue.putEventInHARegion(event, position);
 
           // Add the position counter to the LinkedHashSet
           if (this.counters == null) {
@@ -3041,12 +2996,12 @@ public class HARegionQueue implements RegionQueue {
           this.counters.put(position, null);
 
           // Check if the event is conflatable
-          if (owningQueue.shouldBeConflated(eventInHARegion)) {
+          if (owningQueue.shouldBeConflated(event)) {
             // Add to the conflation map & get the position of the
             // old conflatable entry. The old entry may have inserted by the
             // same
             // ThreadIdentifier or different one.
-            oldPosition = owningQueue.addToConflationMap(eventInHARegion, position);
+            oldPosition = owningQueue.addToConflationMap(event, position);
           }
 
           // Take the size lock & add to the list of availabelIds
@@ -3066,7 +3021,7 @@ public class HARegionQueue implements RegionQueue {
           ccn.getClientProxy(owningQueue.clientProxyID).getStatistics().incMessagesFailedQueued();
         }
       } else {
-        owningQueue.entryEnqueued(eventInHARegion);
+        owningQueue.entryEnqueued(event);
       }
       // Remove the old conflated position
       if (oldPosition != null) {
@@ -3102,8 +3057,7 @@ public class HARegionQueue implements RegionQueue {
           }
           // <HA overflow>
           if (conflatable instanceof HAEventWrapper) {
-            owningQueue.decAndRemoveFromHAContainer((HAEventWrapper) conflatable,
-                "Remove Old Conflated Entry");
+            owningQueue.decAndRemoveFromHAContainer((HAEventWrapper) conflatable);
           }
           // </HA overflow>
           // update statistics
@@ -3185,9 +3139,7 @@ public class HARegionQueue implements RegionQueue {
             }
           } catch (EntryNotFoundException enfe) {
             if (!owningQueue.destroyInProgress) {
-              logger.error(
-                  "DispatchedAndCurrentEvents::expireOrUpdate: Unexpectedly encountered exception while removing expiry entry for ThreadIdentifier={} and expiry value={}",
-                  new Object[] {ti, expVal, enfe});
+              logger.error("RYGUY: enfe destroyInProgress");
             }
           }
         }
@@ -3200,10 +3152,7 @@ public class HARegionQueue implements RegionQueue {
           throw e;
         } catch (Exception e) {
           if (!owningQueue.destroyInProgress) {
-            logger.error(String.format(
-                "DispatchedAndCurrentEvents::expireOrUpdate: Unexpectedly encountered exception while updating expiry ID for ThreadIdentifier=%s",
-                ti),
-                e);
+            logger.error("RYGUY: not expired destroy in progress");
           }
         }
       }
@@ -3258,9 +3207,7 @@ public class HARegionQueue implements RegionQueue {
               if (((HAEventWrapper) event).getReferenceCount() == 0 && logger.isDebugEnabled()) {
                 logger.debug("Reference count is already zero for event {}", event.getEventId());
               }
-
-              owningQueue.decAndRemoveFromHAContainer((HAEventWrapper) event,
-                  "Queue Removal Message");
+              owningQueue.decAndRemoveFromHAContainer((HAEventWrapper) event);
             }
 
             // At this point we know we're going to remove the event,
@@ -3320,7 +3267,7 @@ public class HARegionQueue implements RegionQueue {
           }
           // <HA overflow>
           if (wrapper instanceof HAEventWrapper) {
-            owningQueue.decAndRemoveFromHAContainer((HAEventWrapper) wrapper, "Message Dispatcher");
+            owningQueue.decAndRemoveFromHAContainer((HAEventWrapper) wrapper);
           }
           // </HA overflow>
           owningQueue.stats.incEventsRemoved();
@@ -3352,9 +3299,7 @@ public class HARegionQueue implements RegionQueue {
         owningQueue.destroyFromQueue(counter);
       } catch (EntryNotFoundException enfe) {
         if (!owningQueue.destroyInProgress) {
-          logger.error(
-              "DACE::removeEventAndSetSequenceID: Since the event was successuly removed by a take operation, it should have existed in the region",
-              enfe);
+          logger.error("RYGUY: removeEventAndSetSequenceID");
         }
       }
       if (key == null) {
@@ -3416,8 +3361,7 @@ public class HARegionQueue implements RegionQueue {
   // TODO:Asif : Remove this method
   @Override
   public void remove(int top) {
-    throw new UnsupportedOperationException(
-        "HARegionQueue and its derived class do not support this operation ");
+    throw new UnsupportedOperationException("RYGUY: Remove unsupported");
 
   }
 
@@ -3459,24 +3403,61 @@ public class HARegionQueue implements RegionQueue {
    *
    * @since GemFire 5.7
    */
-  protected Conflatable putEventInHARegion(Conflatable event, Long position) {
+  protected void putEventInHARegion(Conflatable event, Long position) {
     if (event instanceof HAEventWrapper) {
       HAEventWrapper inputHaEventWrapper = (HAEventWrapper) event;
-      HAEventWrapper haContainerKey = null;
-
       if (this.isQueueInitialized()) {
-        haContainerKey = putEntryConditionallyIntoHAContainer(inputHaEventWrapper);
-      } else {
-        haContainerKey = inputHaEventWrapper;
+        if (inputHaEventWrapper.getIsRefFromHAContainer()) {
+          putEntryConditionallyIntoHAContainer(inputHaEventWrapper);
+        } else {
+          // This means that the haEventWrapper reference we have is not
+          // authentic, i.e. it doesn't refer to the HAEventWrapper instance
+          // in the haContainer, but to the one outside it.
+          HAEventWrapper haContainerKey = null;
+          do {
+            ClientUpdateMessageImpl haContainerEntry =
+                (ClientUpdateMessageImpl) ((HAContainerWrapper) this.haContainer)
+                    .putIfAbsent(inputHaEventWrapper, inputHaEventWrapper.getClientUpdateMessage());
+            if (haContainerEntry != null) {
+              haContainerKey = (HAEventWrapper) ((HAContainerWrapper) this.haContainer)
+                  .getKey(inputHaEventWrapper);
+              if (haContainerKey == null) {
+                continue;
+              }
+              synchronized (haContainerKey) {
+                // assert the entry is still present
+                if (((HAContainerWrapper) this.haContainer).getKey(haContainerKey) != null) {
+                  haContainerKey.incAndGetReferenceCount();
+                  addClientCQsAndInterestList(haContainerEntry, inputHaEventWrapper,
+                      this.haContainer, this.regionName);
+                  inputHaEventWrapper = haContainerKey;
+                } else {
+                  haContainerKey = null;
+                }
+              }
+            } else {
+              synchronized (inputHaEventWrapper) {
+                inputHaEventWrapper.incAndGetReferenceCount();
+                inputHaEventWrapper.setHAContainer(this.haContainer);
+                if (!inputHaEventWrapper.getPutInProgress()) {
+                  // This means that this is a GII'ed event. Hence we must
+                  // explicitly set 'clientUpdateMessage' to null.
+                  inputHaEventWrapper.setClientUpdateMessage(null);
+                }
+                inputHaEventWrapper.setIsRefFromHAContainer(true);
+              }
+              break;
+            }
+          } while (haContainerKey == null);
+        }
       }
-
+      // Put the reference to the HAEventWrapper instance into the
+      // HA queue.
       if (logger.isDebugEnabled()) {
-        logger.debug("adding haContainerKey to HARegion at " + position + ":"
-            + haContainerKey + " for " + this.regionName);
+        logger.debug("adding inputHaEventWrapper to HARegion at " + position + ":"
+            + inputHaEventWrapper + " for " + this.regionName);
       }
-      this.region.put(position, haContainerKey);
-
-      return haContainerKey;
+      this.region.put(position, inputHaEventWrapper);
     } else { // (event instanceof ClientMarkerMessageImpl OR ConflatableObject OR
              // ClientInstantiatorMessage)
       if (logger.isDebugEnabled()) {
@@ -3484,8 +3465,6 @@ public class HARegionQueue implements RegionQueue {
             + this.regionName);
       }
       this.region.put(position, event);
-
-      return event;
     }
   }
 
@@ -3499,17 +3478,18 @@ public class HARegionQueue implements RegionQueue {
         msg.addClientCqs(proxyID, clientCQ);
       }
     }
+    // if (haEventWrapper.getPutInProgress()) {
+    // ((HAEventWrapper)entry.getKey()).setPutInProgress(true);
+    // }
 
     // This is a remote HAEventWrapper.
     // Add new Interested client lists.
     ClientUpdateMessageImpl clientMsg =
         (ClientUpdateMessageImpl) haEventWrapper.getClientUpdateMessage();
-    if (clientMsg != null) {
-      if (clientMsg.isClientInterestedInUpdates(proxyID)) {
-        msg.addClientInterestList(proxyID, true);
-      } else if (clientMsg.isClientInterestedInInvalidates(proxyID)) {
-        msg.addClientInterestList(proxyID, false);
-      }
+    if (clientMsg.isClientInterestedInUpdates(proxyID)) {
+      msg.addClientInterestList(proxyID, true);
+    } else if (clientMsg.isClientInterestedInInvalidates(proxyID)) {
+      msg.addClientInterestList(proxyID, false);
     }
   }
 
@@ -3517,69 +3497,17 @@ public class HARegionQueue implements RegionQueue {
    * If the wrapper's referenceCount becomes 1 after increment, then set this haEventWrapper and its
    * clientUpdateMessage into the haContainer as <key, value>.
    *
-   * @param inputHaEventWrapper An instance of {@code HAEventWrapper}
+   * @param haEventWrapper An instance of {@code HAEventWrapper}
    * @since GemFire 5.7
    */
-  protected HAEventWrapper putEntryConditionallyIntoHAContainer(
-      HAEventWrapper inputHaEventWrapper) {
-    HAEventWrapper haContainerKey = null;
-
-    while (haContainerKey == null) {
-      ClientUpdateMessageImpl haContainerEntry =
-          (ClientUpdateMessageImpl) ((HAContainerWrapper) this.haContainer)
-              .putIfAbsent(inputHaEventWrapper, inputHaEventWrapper.getClientUpdateMessage());
-
-      if (haContainerEntry != null) {
-        haContainerKey = (HAEventWrapper) ((HAContainerWrapper) this.haContainer)
-            .getKey(inputHaEventWrapper);
-
-        // Key was already removed from the container, so continue
-        if (haContainerKey == null) {
-          continue;
-        }
-
-        synchronized (haContainerKey) {
-          // assert the entry is still present and we still have the same reference
-          if (haContainerKey == ((HAContainerWrapper) this.haContainer).getKey(haContainerKey)) {
-            haContainerKey.incAndGetReferenceCount();
-
-            addClientCQsAndInterestList(haContainerEntry, inputHaEventWrapper,
-                this.haContainer, this.regionName);
-
-            if (logger.isDebugEnabled()) {
-              logger.debug("Putting updated event in haContainer with Event ID hash code: "
-                  + haContainerKey.hashCode() + "; System ID hash code: "
-                  + System.identityHashCode(haContainerKey)
-                  + "; Wrapper details: " + haContainerKey);
-            }
-          } else {
-            haContainerKey = null;
-          }
-        }
-      } else {
-        synchronized (inputHaEventWrapper) {
-          inputHaEventWrapper.incAndGetReferenceCount();
-          inputHaEventWrapper.setHAContainer(this.haContainer);
-
-          if (!inputHaEventWrapper.getPutInProgress()) {
-            // This means that this is a GII'ed event. Hence we must
-            // explicitly set 'clientUpdateMessage' to null.
-            inputHaEventWrapper.setClientUpdateMessage(null);
-          }
-
-          if (logger.isDebugEnabled()) {
-            logger.debug("Putting new event in haContainer with Event ID hash code: "
-                + inputHaEventWrapper.hashCode()
-                + "; System ID hash code: " + System.identityHashCode(inputHaEventWrapper)
-                + "; Wrapper details: " + inputHaEventWrapper);
-          }
-        }
-
-        haContainerKey = inputHaEventWrapper;
-      }
+  protected void putEntryConditionallyIntoHAContainer(HAEventWrapper haEventWrapper) {
+    if (haEventWrapper.incAndGetReferenceCount() == 1) {
+      // if (logger.isDebugEnabled()) {
+      // logger.fine("Putting event in haContainer: " + haEventWrapper);
+      // }
+      haEventWrapper.setHAContainer(HARegionQueue.this.haContainer);
+      this.haContainer.put(haEventWrapper, haEventWrapper.getClientUpdateMessage());
     }
-
-    return haContainerKey;
   }
 
   /**
@@ -3633,46 +3561,45 @@ public class HARegionQueue implements RegionQueue {
    */
   private void updateHAContainer() {
     try {
-      Object[] availableIdsArray = null;
+      Object[] wrapperArray = null;
       acquireReadLock();
       try {
         if (this.availableIDsSize() != 0) {
-          availableIdsArray = this.availableIDsArray();
+          wrapperArray = this.availableIDsArray();
         }
       } finally {
         releaseReadLock();
       }
-      if (availableIdsArray != null) {
+      if (wrapperArray != null) {
         final Set wrapperSet = new HashSet();
 
-        for (int i = 0; i < availableIdsArray.length; i++) {
-          if (destroyFromAvailableIDs((long) availableIdsArray[i])) {
-            wrapperSet.add(this.region.get(availableIdsArray[i]));
-          }
+        for (int i = 0; i < wrapperArray.length; i++) {
+          wrapperSet.add(this.region.get(wrapperArray[i]));
         }
-
         // Start a new thread which will update the clientMessagesRegion for
         // each of the HAEventWrapper instances present in the wrapperSet
-        Thread regionCleanupTask =
-            new LoggingThread("HA Region Cleanup for " + regionName, false, () -> {
-              try {
-                Iterator iter = wrapperSet.iterator();
-                while (iter.hasNext()) {
-                  Conflatable conflatable = (Conflatable) iter.next();
-                  if (conflatable instanceof HAEventWrapper) {
-                    decAndRemoveFromHAContainer((HAEventWrapper) conflatable, "Destroy");
-                  }
-                }
-              } catch (CancelException ignore) {
-                return; // we're done
-              } catch (Exception e) {
-                if (logger.isDebugEnabled()) {
-                  logger.debug(
-                      "Exception in regionCleanupTask thread of HARegionQueue.updateHAContainer$run()",
-                      e);
+        Thread regionCleanupTask = new Thread(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              Iterator iter = wrapperSet.iterator();
+              while (iter.hasNext()) {
+                Conflatable conflatable = (Conflatable) iter.next();
+                if (conflatable instanceof HAEventWrapper) {
+                  HARegionQueue.this.decAndRemoveFromHAContainer((HAEventWrapper) conflatable);
                 }
               }
-            });
+            } catch (CancelException ignore) {
+              return; // we're done
+            } catch (Exception e) {
+              if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "Exception in regionCleanupTask thread of HARegionQueue.updateHAContainer$run()",
+                    e);
+              }
+            }
+          }
+        });
         regionCleanupTask.start();
       }
     } catch (CancelException e) {
@@ -3688,9 +3615,7 @@ public class HARegionQueue implements RegionQueue {
       // Exception case below.
       logger.warn("HARegionQueue.updateHAContainer: underlying region has been destroyed", e);
     } catch (Exception e) {
-      logger.warn(
-          "Exception in HARegionQueue.updateHAContainer(). The task to decrement the ref count by one for all the HAEventWrapper instances of this queue present in the haContainer may not have been started",
-          e);
+      logger.warn("RYGUY: Really Weird");
     }
   }
 
@@ -3709,7 +3634,7 @@ public class HARegionQueue implements RegionQueue {
       HAEventWrapper wrapper = (HAEventWrapper) conflatable;
       msg = (Conflatable) HARegionQueue.this.haContainer.get(wrapper);
       if (msg != null) {
-        decAndRemoveFromHAContainer(wrapper, "GetAndRemoveFromHAContainer");
+        decAndRemoveFromHAContainer(wrapper);
       }
     } else {
       msg = conflatable;
@@ -3718,44 +3643,23 @@ public class HARegionQueue implements RegionQueue {
   }
 
   /**
-   * Decrements reference count for the wrapper in the container by one. If the decremented ref
-   * count is zero and put is not in progress, removes the entry from the haContainer.
+   * IMPORTANT: <br>
+   * The wrapper passed here must be the authentic wrapper, i.e. it must be the one referred by the
+   * HARegion underlying this queue. <br>
+   * Decrements wrapper's reference count by one. If the decremented ref count is zero and put is
+   * not in progress, removes the entry from the haContainer.
    *
    * @since GemFire 5.7
    */
   public void decAndRemoveFromHAContainer(HAEventWrapper wrapper) {
-    decAndRemoveFromHAContainer(wrapper, "");
-  }
-
-  public void decAndRemoveFromHAContainer(HAEventWrapper wrapper, String caller) {
-    boolean decAndRemovePerformed = false;
-
-    while (!decAndRemovePerformed) {
-      HAEventWrapper haContainerKey =
-          (HAEventWrapper) ((HAContainerWrapper) haContainer).getKey(wrapper);
-
-      if (haContainerKey == null) {
-        break;
-      }
-
-      synchronized (haContainerKey) {
-        if (haContainerKey == (HAEventWrapper) ((HAContainerWrapper) haContainer).getKey(wrapper)) {
+    if (wrapper.decAndGetReferenceCount() == 0L && !wrapper.getPutInProgress()) {
+      synchronized (wrapper) {
+        if (wrapper.getReferenceCount() == 0L) {
           if (logger.isDebugEnabled()) {
-            logger.debug(caller + " decremented Event ID hash code: " + haContainerKey.hashCode()
-                + "; System ID hash code: " + System.identityHashCode(haContainerKey)
-                + "; Wrapper details: " + haContainerKey);
+            logger.debug("Removing event from {}: {}", this.region.getFullPath(),
+                wrapper.getEventId());
           }
-          if (haContainerKey.decAndGetReferenceCount() == 0L) {
-            HARegionQueue.this.haContainer.remove(haContainerKey);
-            if (logger.isDebugEnabled()) {
-              logger.debug(
-                  caller + " removed Event ID hash code: " + haContainerKey.hashCode()
-                      + "; System ID hash code: "
-                      + System.identityHashCode(haContainerKey)
-                      + "; Wrapper details: " + haContainerKey);
-            }
-          }
-          decAndRemovePerformed = true;
+          HARegionQueue.this.haContainer.remove(wrapper);
         }
       }
     }
@@ -3806,9 +3710,7 @@ public class HARegionQueue implements RegionQueue {
           ExpirationAction.LOCAL_INVALIDATE);
       this.region.setEntryTimeToLive(ea);
       this.region.setCustomEntryTimeToLive(new ThreadIdentifierCustomExpiry());
-      logger.info(
-          "Entry expiry tasks disabled because the queue became primary. Old messageTimeToLive was: {}",
-          oldTimeToLive);
+      logger.info("RYGUY: custom entry time to live");
     }
   }
 
