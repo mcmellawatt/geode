@@ -203,7 +203,6 @@ public class PartitionedRegionEvictionDUnitTest extends JUnit4CacheTestCase {
   protected void raiseFakeNotification() {
     ((GemFireCacheImpl) getCache()).getHeapEvictor().setTestAbortAfterLoopCount(1);
     HeapMemoryMonitor.setTestDisableMemoryUpdates(true);
-    System.setProperty(DistributionConfig.GEMFIRE_PREFIX + "memoryEventTolerance", "0");
 
     setEvictionPercentage(85);
     HeapMemoryMonitor hmm =
@@ -216,7 +215,6 @@ public class PartitionedRegionEvictionDUnitTest extends JUnit4CacheTestCase {
   protected void cleanUpAfterFakeNotification() {
     ((GemFireCacheImpl) getCache()).getHeapEvictor().setTestAbortAfterLoopCount(Integer.MAX_VALUE);
     HeapMemoryMonitor.setTestDisableMemoryUpdates(false);
-    System.clearProperty(DistributionConfig.GEMFIRE_PREFIX + "memoryEventTolerance");
   }
 
   @Test

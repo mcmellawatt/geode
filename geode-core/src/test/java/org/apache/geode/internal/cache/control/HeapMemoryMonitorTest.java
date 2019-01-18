@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -31,6 +32,7 @@ import org.apache.geode.cache.LowMemoryException;
 import org.apache.geode.cache.execute.Function;
 import org.apache.geode.distributed.DistributedMember;
 import org.apache.geode.distributed.DistributedSystem;
+import org.apache.geode.distributed.internal.DistributionConfig;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
 import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.test.fake.Fakes;
@@ -44,6 +46,7 @@ public class HeapMemoryMonitorTest {
   private DistributedMember member;
   private InternalDistributedMember myself;
   private ResourceAdvisor resourceAdvisor;
+  private String existingMemoryEventTolerance;
   private static final String LOW_MEMORY_REGEX =
       "Function: null cannot be executed because the members.*are running low on memory";
   private static final int criticalUsedBytes = 95;
@@ -63,12 +66,23 @@ public class HeapMemoryMonitorTest {
     when(internalCache.getDistributionAdvisor()).thenReturn(resourceAdvisor);
     when(internalCache.getMyId()).thenReturn(myself);
 
+    existingMemoryEventTolerance = System.getProperty(DistributionConfig.GEMFIRE_PREFIX + "memoryEventTolerance");
+    System.setProperty(DistributionConfig.GEMFIRE_PREFIX + "memoryEventTolerance", "3");
     heapMonitor = new HeapMemoryMonitor(mock(InternalResourceManager.class), internalCache, mock(ResourceManagerStats.class));
     memberSet = new HashSet<>();
     memberSet.add(member);
     heapMonitor.setMostRecentEvent(new MemoryEvent(InternalResourceManager.ResourceType.HEAP_MEMORY,
         MemoryThresholds.MemoryState.DISABLED, MemoryThresholds.MemoryState.DISABLED, null, 0L,
         true, null)); // myself is not critical
+  }
+
+  @After
+  public void cleanup() {
+    // Restore any previously configured memoryStateChangeTolerance
+    if (existingMemoryEventTolerance != null) {
+      System.setProperty(DistributionConfig.GEMFIRE_PREFIX + "memoryEventTolerance",
+          existingMemoryEventTolerance);
+    }
   }
 
   // ========== tests for getHeapCriticalMembersFrom ==========
@@ -364,9 +378,6 @@ public class HeapMemoryMonitorTest {
   private void setupHeapMonitorThresholds(boolean enableEviction, boolean enableCritical) {
     // Initialize the most recent state to NORMAL
     heapMonitor = spy(heapMonitor);
-
-    // Override the tolerance to allow 3 consecutive events before allowing a state transition.
-    when(heapMonitor.getMemoryStateChangeTolerance()).thenReturn(3);
 
     // This will prevent the polling monitor from firing and causing state transitions.  We
     // want complete control over the state transitions in this test.
