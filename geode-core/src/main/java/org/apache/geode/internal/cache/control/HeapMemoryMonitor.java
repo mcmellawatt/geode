@@ -460,7 +460,7 @@ public class HeapMemoryMonitor implements NotificationListener, MemoryMonitor {
       if (oldState != newState) {
         setUsageThresholdOnMXBean(bytesUsed);
 
-        if (!skipEventDueToToleranceLimits(oldState, newState)) {
+        if (!skipEventDueToToleranceLimits(newState)) {
           this.currentState = newState;
 
           MemoryEvent event = new MemoryEvent(ResourceType.HEAP_MEMORY, oldState, newState,
@@ -573,17 +573,18 @@ public class HeapMemoryMonitor implements NotificationListener, MemoryMonitor {
   }
 
   /**
-   * To avoid memory spikes in jrockit, we only deliver events if we receive more than
+   * To avoid memory spikes in JVMs susceptible to bad heap memory
+   * reads/outliers, we only deliver events if we receive more than
    * {@link HeapMemoryMonitor#memoryStateChangeTolerance} of the same state change.
    *
    * @return True if an event should be skipped, false otherwise.
    */
-  private boolean skipEventDueToToleranceLimits(MemoryState oldState, MemoryState newState) {
+  private boolean skipEventDueToToleranceLimits(MemoryState newState) {
     if (testDisableMemoryUpdates) {
       return false;
     }
 
-    if ((newState.isEviction() && !oldState.isEviction()) || newState.isCritical()) {
+    if (newState.isEviction() || newState.isCritical()) {
       this.toleranceCounter++;
       if (this.toleranceCounter <= getMemoryStateChangeTolerance()) {
         if (logger.isDebugEnabled()) {
@@ -614,7 +615,7 @@ public class HeapMemoryMonitor implements NotificationListener, MemoryMonitor {
     return tenuredPoolMaxMemory;
   }
 
-  protected int getMemoryStateChangeTolerance() {
+  int getMemoryStateChangeTolerance() {
     return memoryStateChangeTolerance;
   }
 
