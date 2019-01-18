@@ -143,8 +143,7 @@ public class HeapMemoryMonitor implements NotificationListener, MemoryMonitor {
 
   // Only change state when these counters exceed {@link
   // HeapMemoryMonitor#memoryStateChangeTolerance}
-  private int criticalToleranceCounter;
-  private int evictionToleranceCounter;
+  private int toleranceCounter;
 
   private final InternalResourceManager resourceManager;
   private final ResourceAdvisor resourceAdvisor;
@@ -480,6 +479,8 @@ public class HeapMemoryMonitor implements NotificationListener, MemoryMonitor {
             this.cache.getMyId(), bytesUsed, true, this.thresholds);
         this.upcomingEvent.set(event);
         processLocalEvent(event);
+      } else if (oldState.isNormal()) {
+        toleranceCounter = 0;
       }
     }
   }
@@ -582,31 +583,18 @@ public class HeapMemoryMonitor implements NotificationListener, MemoryMonitor {
       return false;
     }
 
-    if (newState.isEviction() && !oldState.isEviction()) {
-      this.evictionToleranceCounter++;
-      this.criticalToleranceCounter = 0;
-      if (this.evictionToleranceCounter <= getMemoryStateChangeTolerance()) {
+    if ((newState.isEviction() && !oldState.isEviction()) || newState.isCritical()) {
+      this.toleranceCounter++;
+      if (this.toleranceCounter <= getMemoryStateChangeTolerance()) {
         if (logger.isDebugEnabled()) {
           logger.debug("State " + newState + " ignored. toleranceCounter:"
-              + this.evictionToleranceCounter + " MEMORY_EVENT_TOLERANCE:"
-              + getMemoryStateChangeTolerance());
-        }
-        return true;
-      }
-    } else if (newState.isCritical()) {
-      this.criticalToleranceCounter++;
-      this.evictionToleranceCounter = 0;
-      if (this.criticalToleranceCounter <= getMemoryStateChangeTolerance()) {
-        if (logger.isDebugEnabled()) {
-          logger.debug("State " + newState + " ignored. toleranceCounter:"
-              + this.criticalToleranceCounter + " MEMORY_EVENT_TOLERANCE:"
+              + this.toleranceCounter + " MEMORY_EVENT_TOLERANCE:"
               + getMemoryStateChangeTolerance());
         }
         return true;
       }
     } else {
-      this.criticalToleranceCounter = 0;
-      this.evictionToleranceCounter = 0;
+      this.toleranceCounter = 0;
       if (logger.isDebugEnabled()) {
         logger.debug("TOLERANCE counters reset");
       }
@@ -832,8 +820,7 @@ public class HeapMemoryMonitor implements NotificationListener, MemoryMonitor {
   @Override
   public String toString() {
     return "HeapMemoryMonitor [thresholds=" + this.thresholds + ", mostRecentEvent="
-        + this.mostRecentEvent + ", criticalToleranceCounter=" + this.criticalToleranceCounter
-        + ", evictionToleranceCounter=" + this.evictionToleranceCounter + "]";
+        + this.mostRecentEvent + ", toleranceCounter=" + this.toleranceCounter + "]";
   }
 
   /**

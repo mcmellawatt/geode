@@ -266,25 +266,33 @@ public class HeapMemoryMonitorTest {
     // want complete control over the state transitions in this test.
     heapMonitor.started = true;
 
-    heapMonitor.setMostRecentEvent(new MemoryEvent(InternalResourceManager.ResourceType.HEAP_MEMORY,
-        MemoryThresholds.MemoryState.NORMAL, MemoryThresholds.MemoryState.NORMAL, null, 0L,
-        true, null));
-
     HeapMemoryMonitor.setTestBytesUsedForThresholdSet(50);
     heapMonitor.setTestMaxMemoryBytes(100);
     heapMonitor.setCriticalThreshold(90f);
     heapMonitor.setEvictionThreshold(80f);
 
+    // If we thrash between CRITICAL_EVICTION and NORMAL, we don't expect a state transition
+    // to happen because we have a memoryStateChangeTolerance of 3 in this test.
     heapMonitor.updateStateAndSendEvent(95);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.NORMAL);
     heapMonitor.updateStateAndSendEvent(60);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.NORMAL);
     heapMonitor.updateStateAndSendEvent(95);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.NORMAL);
     heapMonitor.updateStateAndSendEvent(60);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.NORMAL);
     heapMonitor.updateStateAndSendEvent(95);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.NORMAL);
     heapMonitor.updateStateAndSendEvent(60);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.NORMAL);
     heapMonitor.updateStateAndSendEvent(95);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.NORMAL);
     heapMonitor.updateStateAndSendEvent(60);
-
-    assertThat(heapMonitor.getState()).isNotEqualByComparingTo(MemoryThresholds.MemoryState.EVICTION_CRITICAL);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.NORMAL);
+    heapMonitor.updateStateAndSendEvent(95);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.NORMAL);
+    heapMonitor.updateStateAndSendEvent(60);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.NORMAL);
   }
 
   @Test
@@ -298,10 +306,6 @@ public class HeapMemoryMonitorTest {
     // This will prevent the polling monitor from firing and causing state transitions.  We
     // want complete control over the state transitions in this test.
     heapMonitor.started = true;
-
-    heapMonitor.setMostRecentEvent(new MemoryEvent(InternalResourceManager.ResourceType.HEAP_MEMORY,
-        MemoryThresholds.MemoryState.NORMAL, MemoryThresholds.MemoryState.NORMAL, null, 0L,
-        true, null));
 
     HeapMemoryMonitor.setTestBytesUsedForThresholdSet(50);
     heapMonitor.setTestMaxMemoryBytes(100);
@@ -328,10 +332,6 @@ public class HeapMemoryMonitorTest {
     // want complete control over the state transitions in this test.
     heapMonitor.started = true;
 
-    heapMonitor.setMostRecentEvent(new MemoryEvent(InternalResourceManager.ResourceType.HEAP_MEMORY,
-        MemoryThresholds.MemoryState.NORMAL, MemoryThresholds.MemoryState.NORMAL, null, 0L,
-        true, null));
-
     HeapMemoryMonitor.setTestBytesUsedForThresholdSet(50);
     heapMonitor.setTestMaxMemoryBytes(100);
     heapMonitor.setCriticalThreshold(90f);
@@ -342,7 +342,116 @@ public class HeapMemoryMonitorTest {
     heapMonitor.updateStateAndSendEvent(95);
     heapMonitor.updateStateAndSendEvent(85);
 
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.EVICTION);
+  }
+
+  @Test
+  public void updateStateAndSendEvent_ThreeEvictionsThenCriticalTransitionEvictionCritical() {
+    // Initialize the most recent state to NORMAL
+    heapMonitor = spy(heapMonitor);
+
+    // Override the tolerance to allow 3 consecutive events before allowing a state transition.
+    when(heapMonitor.getMemoryStateChangeTolerance()).thenReturn(3);
+
+    // This will prevent the polling monitor from firing and causing state transitions.  We
+    // want complete control over the state transitions in this test.
+    heapMonitor.started = true;
+
+    HeapMemoryMonitor.setTestBytesUsedForThresholdSet(50);
+    heapMonitor.setTestMaxMemoryBytes(100);
+    heapMonitor.setCriticalThreshold(90f);
+    heapMonitor.setEvictionThreshold(80f);
+
+    heapMonitor.updateStateAndSendEvent(85);
+    heapMonitor.updateStateAndSendEvent(85);
+    heapMonitor.updateStateAndSendEvent(85);
+    heapMonitor.updateStateAndSendEvent(95);
+
     assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.EVICTION_CRITICAL);
+  }
+
+  @Test
+  public void updateStateAndSendEvent_EvictionDisabledTransitionToCritical() {
+    // Initialize the most recent state to NORMAL
+    heapMonitor = spy(heapMonitor);
+
+    // Override the tolerance to allow 3 consecutive events before allowing a state transition.
+    when(heapMonitor.getMemoryStateChangeTolerance()).thenReturn(3);
+
+    // This will prevent the polling monitor from firing and causing state transitions.  We
+    // want complete control over the state transitions in this test.
+    heapMonitor.started = true;
+
+    HeapMemoryMonitor.setTestBytesUsedForThresholdSet(50);
+    heapMonitor.setTestMaxMemoryBytes(100);
+    heapMonitor.setCriticalThreshold(90f);
+
+    heapMonitor.updateStateAndSendEvent(95);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.EVICTION_DISABLED);
+
+    heapMonitor.updateStateAndSendEvent(95);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.EVICTION_DISABLED);
+
+    heapMonitor.updateStateAndSendEvent(95);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.EVICTION_DISABLED);
+
+    heapMonitor.updateStateAndSendEvent(95);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.EVICTION_DISABLED_CRITICAL);
+  }
+
+  @Test
+  public void updateStateAndSendEvent_CriticalDisabledTransitionToEviction() {
+    // Initialize the most recent state to NORMAL
+    heapMonitor = spy(heapMonitor);
+
+    // Override the tolerance to allow 3 consecutive events before allowing a state transition.
+    when(heapMonitor.getMemoryStateChangeTolerance()).thenReturn(3);
+
+    // This will prevent the polling monitor from firing and causing state transitions.  We
+    // want complete control over the state transitions in this test.
+    heapMonitor.started = true;
+
+    HeapMemoryMonitor.setTestBytesUsedForThresholdSet(50);
+    heapMonitor.setTestMaxMemoryBytes(100);
+    heapMonitor.setEvictionThreshold(80f);
+
+    // It should take 4 above critical events for the state transition to take effect, because
+    // our memory state change tolerance is set to 3 for this test
+    heapMonitor.updateStateAndSendEvent(85);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.CRITICAL_DISABLED);
+
+    heapMonitor.updateStateAndSendEvent(85);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.CRITICAL_DISABLED);
+
+    heapMonitor.updateStateAndSendEvent(85);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.CRITICAL_DISABLED);
+
+    heapMonitor.updateStateAndSendEvent(85);
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.EVICTION_CRITICAL_DISABLED);
+  }
+
+  @Test
+  public void updateStateAndSendEvent_BouncingBetweenEvictionAndCritical() {
+    // Initialize the most recent state to NORMAL
+    heapMonitor = spy(heapMonitor);
+
+    // Override the tolerance to allow 3 consecutive events before allowing a state transition.
+    when(heapMonitor.getMemoryStateChangeTolerance()).thenReturn(3);
+
+    // This will prevent the polling monitor from firing and causing state transitions.  We
+    // want complete control over the state transitions in this test.
+    heapMonitor.started = true;
+
+    HeapMemoryMonitor.setTestBytesUsedForThresholdSet(50);
+    heapMonitor.setTestMaxMemoryBytes(100);
+    heapMonitor.setEvictionThreshold(80f);
+
+    heapMonitor.updateStateAndSendEvent(95);
+    heapMonitor.updateStateAndSendEvent(85);
+    heapMonitor.updateStateAndSendEvent(95);
+    heapMonitor.updateStateAndSendEvent(85);
+
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.EVICTION_CRITICAL_DISABLED);
   }
 
   // ========== private methods ==========
