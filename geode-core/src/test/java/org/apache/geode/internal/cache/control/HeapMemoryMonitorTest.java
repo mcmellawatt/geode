@@ -17,6 +17,7 @@ package org.apache.geode.internal.cache.control;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 import java.util.Collections;
@@ -27,11 +28,15 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.geode.cache.LowMemoryException;
+import org.apache.geode.cache.control.ResourceManager;
 import org.apache.geode.cache.execute.Function;
 import org.apache.geode.distributed.DistributedMember;
 import org.apache.geode.distributed.DistributedSystem;
+import org.apache.geode.distributed.internal.DistributionConfig;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
+import org.apache.geode.internal.Assert;
 import org.apache.geode.internal.cache.InternalCache;
+import org.apache.geode.test.fake.Fakes;
 
 public class HeapMemoryMonitorTest {
 
@@ -41,12 +46,13 @@ public class HeapMemoryMonitorTest {
   private DistributedMember member;
   private InternalDistributedMember myself;
   private ResourceAdvisor resourceAdvisor;
+  private Integer memoryEventTolerance;
   private static final String LOW_MEMORY_REGEX =
       "Function: null cannot be executed because the members.*are running low on memory";
 
   @Before
   public void setup() {
-    InternalCache internalCache = mock(InternalCache.class);
+    InternalCache internalCache = Fakes.cache();
     DistributedSystem distributedSystem = mock(DistributedSystem.class);
     function = mock(Function.class);
     member = mock(InternalDistributedMember.class);
@@ -57,7 +63,7 @@ public class HeapMemoryMonitorTest {
     when(internalCache.getDistributionAdvisor()).thenReturn(resourceAdvisor);
     when(internalCache.getMyId()).thenReturn(myself);
 
-    heapMonitor = new HeapMemoryMonitor(null, internalCache, null);
+    heapMonitor = new HeapMemoryMonitor(mock(InternalResourceManager.class), internalCache, mock(ResourceManagerStats.class));
     memberSet = new HashSet<>();
     memberSet.add(member);
     heapMonitor.setMostRecentEvent(new MemoryEvent(InternalResourceManager.ResourceType.HEAP_MEMORY,
@@ -246,6 +252,97 @@ public class HeapMemoryMonitorTest {
 
     assertThatThrownBy(() -> heapMonitor.checkForLowMemory(function, member))
         .isExactlyInstanceOf(LowMemoryException.class).hasMessageMatching(LOW_MEMORY_REGEX);
+  }
+
+  @Test
+  public void updateStateAndSendEvent_ThrashingShouldNotChangeState() {
+    // Initialize the most recent state to NORMAL
+    heapMonitor = spy(heapMonitor);
+
+    // Override the tolerance to allow 3 consecutive events before allowing a state transition.
+    when(heapMonitor.getMemoryStateChangeTolerance()).thenReturn(3);
+
+    // This will prevent the polling monitor from firing and causing state transitions.  We
+    // want complete control over the state transitions in this test.
+    heapMonitor.started = true;
+
+    heapMonitor.setMostRecentEvent(new MemoryEvent(InternalResourceManager.ResourceType.HEAP_MEMORY,
+        MemoryThresholds.MemoryState.NORMAL, MemoryThresholds.MemoryState.NORMAL, null, 0L,
+        true, null));
+
+    HeapMemoryMonitor.setTestBytesUsedForThresholdSet(50);
+    heapMonitor.setTestMaxMemoryBytes(100);
+    heapMonitor.setCriticalThreshold(90f);
+    heapMonitor.setEvictionThreshold(80f);
+
+    heapMonitor.updateStateAndSendEvent(95);
+    heapMonitor.updateStateAndSendEvent(60);
+    heapMonitor.updateStateAndSendEvent(95);
+    heapMonitor.updateStateAndSendEvent(60);
+    heapMonitor.updateStateAndSendEvent(95);
+    heapMonitor.updateStateAndSendEvent(60);
+    heapMonitor.updateStateAndSendEvent(95);
+    heapMonitor.updateStateAndSendEvent(60);
+
+    assertThat(heapMonitor.getState()).isNotEqualByComparingTo(MemoryThresholds.MemoryState.EVICTION_CRITICAL);
+  }
+
+  @Test
+  public void updateStateAndSendEvent_AboveCriticalMoreThanEventTolerance() {
+    // Initialize the most recent state to NORMAL
+    heapMonitor = spy(heapMonitor);
+
+    // Override the tolerance to allow 3 consecutive events before allowing a state transition.
+    when(heapMonitor.getMemoryStateChangeTolerance()).thenReturn(3);
+
+    // This will prevent the polling monitor from firing and causing state transitions.  We
+    // want complete control over the state transitions in this test.
+    heapMonitor.started = true;
+
+    heapMonitor.setMostRecentEvent(new MemoryEvent(InternalResourceManager.ResourceType.HEAP_MEMORY,
+        MemoryThresholds.MemoryState.NORMAL, MemoryThresholds.MemoryState.NORMAL, null, 0L,
+        true, null));
+
+    HeapMemoryMonitor.setTestBytesUsedForThresholdSet(50);
+    heapMonitor.setTestMaxMemoryBytes(100);
+    heapMonitor.setCriticalThreshold(90f);
+    heapMonitor.setEvictionThreshold(80f);
+
+    heapMonitor.updateStateAndSendEvent(95);
+    heapMonitor.updateStateAndSendEvent(95);
+    heapMonitor.updateStateAndSendEvent(95);
+    heapMonitor.updateStateAndSendEvent(95);
+
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.EVICTION_CRITICAL);
+  }
+
+  @Test
+  public void updateStateAndSendEvent_AboveCriticalTwoEventsThenAboveEviction() {
+    // Initialize the most recent state to NORMAL
+    heapMonitor = spy(heapMonitor);
+
+    // Override the tolerance to allow 3 consecutive events before allowing a state transition.
+    when(heapMonitor.getMemoryStateChangeTolerance()).thenReturn(3);
+
+    // This will prevent the polling monitor from firing and causing state transitions.  We
+    // want complete control over the state transitions in this test.
+    heapMonitor.started = true;
+
+    heapMonitor.setMostRecentEvent(new MemoryEvent(InternalResourceManager.ResourceType.HEAP_MEMORY,
+        MemoryThresholds.MemoryState.NORMAL, MemoryThresholds.MemoryState.NORMAL, null, 0L,
+        true, null));
+
+    HeapMemoryMonitor.setTestBytesUsedForThresholdSet(50);
+    heapMonitor.setTestMaxMemoryBytes(100);
+    heapMonitor.setCriticalThreshold(90f);
+    heapMonitor.setEvictionThreshold(80f);
+
+    heapMonitor.updateStateAndSendEvent(95);
+    heapMonitor.updateStateAndSendEvent(95);
+    heapMonitor.updateStateAndSendEvent(95);
+    heapMonitor.updateStateAndSendEvent(85);
+
+    assertThat(heapMonitor.getState()).isEqualByComparingTo(MemoryThresholds.MemoryState.EVICTION_CRITICAL);
   }
 
   // ========== private methods ==========
