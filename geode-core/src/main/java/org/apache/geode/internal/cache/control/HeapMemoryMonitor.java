@@ -211,6 +211,14 @@ public class HeapMemoryMonitor implements NotificationListener, MemoryMonitor {
     return builder.toString();
   }
 
+  public void setMemoryStateChangeTolerance(int memoryStateChangeTolerance) {
+    thresholds.setMemoryStateChangeTolerance(memoryStateChangeTolerance);
+  }
+
+  public int getMemoryStateChangeTolerance() {
+    return thresholds.getMemoryStateChangeTolerance();
+  }
+
   /**
    * Monitoring is done using a combination of data from the JVM and statistics collected from the
    * cache. A usage threshold is set on the MemoryMXBean of the JVM to get notifications when the
@@ -834,9 +842,5 @@ public class HeapMemoryMonitor implements NotificationListener, MemoryMonitor {
    */
   public static void setTestBytesUsedForThresholdSet(final long newTestBytesUsedForThresholdSet) {
     testBytesUsedForThresholdSet = newTestBytesUsedForThresholdSet;
-  }
-
-  public void setMemoryStateChangeTolerance(int memoryStateChangeTolerance) {
-    thresholds.setMemoryStateChangeTolerance(memoryStateChangeTolerance);
   }
 }

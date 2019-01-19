@@ -273,8 +273,12 @@ public class MemoryThresholds {
     return this.evictionThreshold > 0.0f;
   }
 
-  public void setMemoryStateChangeTolerance(int memoryStateChangeTolerance) {
+  void setMemoryStateChangeTolerance(int memoryStateChangeTolerance) {
     MemoryThresholds.memoryStateChangeTolerance = memoryStateChangeTolerance;
+  }
+
+  int getMemoryStateChangeTolerance() {
+    return MemoryThresholds.memoryStateChangeTolerance;
   }
 
   /**
