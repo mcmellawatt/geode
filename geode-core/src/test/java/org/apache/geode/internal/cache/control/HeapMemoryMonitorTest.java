@@ -32,13 +32,10 @@ import org.apache.geode.cache.LowMemoryException;
 import org.apache.geode.cache.execute.Function;
 import org.apache.geode.distributed.DistributedMember;
 import org.apache.geode.distributed.DistributedSystem;
-import org.apache.geode.distributed.internal.DistributionConfig;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
 import org.apache.geode.internal.cache.InternalCache;
-import org.apache.geode.test.fake.Fakes;
 
 public class HeapMemoryMonitorTest {
-
 
   private HeapMemoryMonitor heapMonitor;
   private Function function;
@@ -46,16 +43,18 @@ public class HeapMemoryMonitorTest {
   private DistributedMember member;
   private InternalDistributedMember myself;
   private ResourceAdvisor resourceAdvisor;
-  private String existingMemoryEventTolerance;
+  private int previousMemoryStateChangeTolerance;
+  private static final int memoryStateChangeTolerance = 3;
   private static final String LOW_MEMORY_REGEX =
       "Function: null cannot be executed because the members.*are running low on memory";
   private static final int criticalUsedBytes = 95;
   private static final int evictionUsedBytes = 85;
   private static final int normalUsedBytes = 60;
 
+
   @Before
   public void setup() {
-    InternalCache internalCache = Fakes.cache();
+    InternalCache internalCache = mock(InternalCache.class);
     DistributedSystem distributedSystem = mock(DistributedSystem.class);
     function = mock(Function.class);
     member = mock(InternalDistributedMember.class);
@@ -66,9 +65,9 @@ public class HeapMemoryMonitorTest {
     when(internalCache.getDistributionAdvisor()).thenReturn(resourceAdvisor);
     when(internalCache.getMyId()).thenReturn(myself);
 
-    existingMemoryEventTolerance = System.getProperty(DistributionConfig.GEMFIRE_PREFIX + "memoryEventTolerance");
-    System.setProperty(DistributionConfig.GEMFIRE_PREFIX + "memoryEventTolerance", "3");
     heapMonitor = new HeapMemoryMonitor(mock(InternalResourceManager.class), internalCache, mock(ResourceManagerStats.class));
+    previousMemoryStateChangeTolerance = heapMonitor.getMemoryStateChangeTolerance();
+    heapMonitor.setMemoryStateChangeTolerance(memoryStateChangeTolerance);
     memberSet = new HashSet<>();
     memberSet.add(member);
     heapMonitor.setMostRecentEvent(new MemoryEvent(InternalResourceManager.ResourceType.HEAP_MEMORY,
@@ -78,11 +77,7 @@ public class HeapMemoryMonitorTest {
 
   @After
   public void cleanup() {
-    // Restore any previously configured memoryStateChangeTolerance
-    if (existingMemoryEventTolerance != null) {
-      System.setProperty(DistributionConfig.GEMFIRE_PREFIX + "memoryEventTolerance",
-          existingMemoryEventTolerance);
-    }
+    heapMonitor.setMemoryStateChangeTolerance(previousMemoryStateChangeTolerance);
   }
 
   // ========== tests for getHeapCriticalMembersFrom ==========
@@ -270,7 +265,7 @@ public class HeapMemoryMonitorTest {
 
   // ========== tests for updateStateAndSendEvent ==========
   @Test
-  public void updateStateAndSendEvent_ThrashingShouldNotChangeState() {
+  public void updateStateAndSendEvent_ThrashingShouldNotChangeState_CriticalAndEvictionEnabled() {
     // Initialize the most recent state to NORMAL
     setupHeapMonitorThresholds(true, true);
 
@@ -288,6 +283,48 @@ public class HeapMemoryMonitorTest {
     sendEventAndAssertState(normalUsedBytes, 1, MemoryThresholds.MemoryState.NORMAL);
     sendEventAndAssertState(criticalUsedBytes, 1, MemoryThresholds.MemoryState.NORMAL);
     sendEventAndAssertState(normalUsedBytes, 1, MemoryThresholds.MemoryState.NORMAL);
+  }
+
+  @Test
+  public void updateStateAndSendEvent_ThrashingShouldNotChangeState_CriticalOnlyEnabled() {
+    // Initialize the most recent state to NORMAL
+    setupHeapMonitorThresholds(false, true);
+
+    // If we thrash between EVICTION_DISABLED_CRITICAL and NORMAL, we don't expect a state transition
+    // to happen because we have a memoryStateChangeTolerance of 3 in this test.  We only expect
+    // a state transition if threshold value + 1 consecutive events have been received above
+    // the critical threshold.
+    sendEventAndAssertState(criticalUsedBytes, 1, MemoryThresholds.MemoryState.EVICTION_DISABLED);
+    sendEventAndAssertState(normalUsedBytes, 1, MemoryThresholds.MemoryState.EVICTION_DISABLED);
+    sendEventAndAssertState(criticalUsedBytes, 1, MemoryThresholds.MemoryState.EVICTION_DISABLED);
+    sendEventAndAssertState(normalUsedBytes, 1, MemoryThresholds.MemoryState.EVICTION_DISABLED);
+    sendEventAndAssertState(criticalUsedBytes, 1, MemoryThresholds.MemoryState.EVICTION_DISABLED);
+    sendEventAndAssertState(normalUsedBytes, 1, MemoryThresholds.MemoryState.EVICTION_DISABLED);
+    sendEventAndAssertState(criticalUsedBytes, 1, MemoryThresholds.MemoryState.EVICTION_DISABLED);
+    sendEventAndAssertState(normalUsedBytes, 1, MemoryThresholds.MemoryState.EVICTION_DISABLED);
+    sendEventAndAssertState(criticalUsedBytes, 1, MemoryThresholds.MemoryState.EVICTION_DISABLED);
+    sendEventAndAssertState(normalUsedBytes, 1, MemoryThresholds.MemoryState.EVICTION_DISABLED);
+  }
+
+  @Test
+  public void updateStateAndSendEvent_ThrashingShouldNotChangeState_EvictionOnlyEnabled() {
+    // Initialize the most recent state to NORMAL
+    setupHeapMonitorThresholds(true, false);
+
+    // If we thrash between EVICTION_CRITICAL_DISABLED and NORMAL, we don't expect a state transition
+    // to happen because we have a memoryStateChangeTolerance of 3 in this test.  We only expect
+    // a state transition if threshold value + 1 consecutive events have been received above
+    // the critical threshold.
+    sendEventAndAssertState(criticalUsedBytes, 1, MemoryThresholds.MemoryState.CRITICAL_DISABLED);
+    sendEventAndAssertState(normalUsedBytes, 1, MemoryThresholds.MemoryState.CRITICAL_DISABLED);
+    sendEventAndAssertState(criticalUsedBytes, 1, MemoryThresholds.MemoryState.CRITICAL_DISABLED);
+    sendEventAndAssertState(normalUsedBytes, 1, MemoryThresholds.MemoryState.CRITICAL_DISABLED);
+    sendEventAndAssertState(criticalUsedBytes, 1, MemoryThresholds.MemoryState.CRITICAL_DISABLED);
+    sendEventAndAssertState(normalUsedBytes, 1, MemoryThresholds.MemoryState.CRITICAL_DISABLED);
+    sendEventAndAssertState(criticalUsedBytes, 1, MemoryThresholds.MemoryState.CRITICAL_DISABLED);
+    sendEventAndAssertState(normalUsedBytes, 1, MemoryThresholds.MemoryState.CRITICAL_DISABLED);
+    sendEventAndAssertState(criticalUsedBytes, 1, MemoryThresholds.MemoryState.CRITICAL_DISABLED);
+    sendEventAndAssertState(normalUsedBytes, 1, MemoryThresholds.MemoryState.CRITICAL_DISABLED);
   }
 
   @Test

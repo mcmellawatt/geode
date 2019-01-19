@@ -20,7 +20,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -31,7 +30,6 @@ import org.apache.geode.cache.Cache;
 import org.apache.geode.cache.DataPolicy;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.RegionAttributes;
-import org.apache.geode.cache.query.internal.QueryMonitor;
 import org.apache.geode.distributed.internal.ClusterDistributionManager;
 import org.apache.geode.distributed.internal.DSClock;
 import org.apache.geode.distributed.internal.DistributionConfig;
@@ -41,9 +39,6 @@ import org.apache.geode.internal.cache.CachePerfStats;
 import org.apache.geode.internal.cache.GemFireCacheImpl;
 import org.apache.geode.internal.cache.TXManagerImpl;
 import org.apache.geode.internal.security.SecurityService;
-import org.apache.geode.internal.statistics.GemFireStatSampler;
-import org.apache.geode.internal.statistics.StatisticsManager;
-import org.apache.geode.internal.statistics.StatisticsSampler;
 import org.apache.geode.pdx.PdxInstanceFactory;
 import org.apache.geode.pdx.internal.TypeRegistry;
 
@@ -80,9 +75,6 @@ public class Fakes {
     LogWriter logger = mock(LogWriter.class);
     Statistics stats = mock(Statistics.class);
     TXManagerImpl txManager = mock(TXManagerImpl.class);
-    GemFireStatSampler statsSampler = mock(GemFireStatSampler.class);
-    StatisticsManager statsManager = mock(StatisticsManager.class);
-    when(statsManager.getStatsList()).thenReturn(new ArrayList<Statistics>(){{add(mock(Statistics.class));}});
 
     InternalDistributedMember member;
     member = new InternalDistributedMember("localhost", 5555);
@@ -101,8 +93,6 @@ public class Fakes {
     when(cache.createPdxInstanceFactory(any())).thenReturn(pdxInstanceFactory);
     when(cache.getPdxRegistry()).thenReturn(pdxRegistryMock);
     when(cache.getTxManager()).thenReturn(txManager);
-    when(cache.getLogger()).thenReturn(logger);
-    when(cache.getQueryMonitor()).thenReturn(mock(QueryMonitor.class));
 
     when(system.getDistributedMember()).thenReturn(member);
     when(system.getConfig()).thenReturn(config);
@@ -114,8 +104,6 @@ public class Fakes {
     when(system.createAtomicStatistics(any(), any(), anyLong())).thenReturn(stats);
     when(system.createAtomicStatistics(any(), any())).thenReturn(stats);
     when(system.getCache()).thenReturn(cache);
-    when(system.getStatSampler()).thenReturn(statsSampler);
-    when(system.getStatisticsManager()).thenReturn(statsManager);
 
     when(distributionManager.getId()).thenReturn(member);
     when(distributionManager.getDistributionManagerId()).thenReturn(member);

@@ -210,6 +210,7 @@ public class MemoryThresholds {
     if (this.evictionThreshold == 0) {
       if (bytesUsed < this.criticalThresholdClearBytes
           || (!oldState.isCritical() && bytesUsed < this.criticalThresholdBytes)) {
+        toleranceCounter = 0;
         return MemoryState.EVICTION_DISABLED;
       }
       return checkToleranceAndGetNextState(MemoryState.EVICTION_DISABLED_CRITICAL, oldState);
@@ -218,6 +219,7 @@ public class MemoryThresholds {
     // Just the eviction threshold is enabled
     if (bytesUsed < this.evictionThresholdClearBytes
         || (!oldState.isEviction() && bytesUsed < this.evictionThresholdBytes)) {
+      toleranceCounter = 0;
       return MemoryState.CRITICAL_DISABLED;
     }
 
