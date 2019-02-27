@@ -1571,10 +1571,10 @@ public class InternalDistributedSystem extends DistributedSystem
       }
       cancelReconnect();
     }
+    HashSet<ShutdownListener> shutdownListeners = null;
 
     final boolean isDebugEnabled = logger.isDebugEnabled();
     try {
-      HashSet<ShutdownListener> shutdownListeners = null;
       try {
         if (isDebugEnabled) {
           logger.debug("DistributedSystem.disconnect invoked on {}", this);
@@ -1659,10 +1659,6 @@ public class InternalDistributedSystem extends DistributedSystem
         } // finally timer cancelled
       } // finally dm closed
 
-      if (!isShutdownHook) {
-        doShutdownListeners(shutdownListeners);
-      }
-
       // closing the Aggregate stats
       if (functionServiceStats != null) {
         functionServiceStats.close();
@@ -1705,6 +1701,10 @@ public class InternalDistributedSystem extends DistributedSystem
           SystemFailure.stopThreads();
         }
       }
+    }
+
+    if (!isShutdownHook) {
+      doShutdownListeners(shutdownListeners);
     }
   }
 
