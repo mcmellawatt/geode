@@ -25,8 +25,11 @@ import org.apache.geode.cache.query.QueryInvalidException;
 import org.apache.geode.cache.query.QueryService;
 import org.apache.geode.cache.query.SelectResults;
 import org.apache.geode.cache.query.internal.DefaultQuery;
+import org.apache.geode.cache.query.internal.ExecutionContext;
+import org.apache.geode.cache.query.internal.QueryExecutionContext;
 import org.apache.geode.cache.query.internal.types.CollectionTypeImpl;
 import org.apache.geode.cache.query.types.CollectionType;
+import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.internal.cache.tier.Command;
 import org.apache.geode.internal.cache.tier.sockets.BaseCommandQuery;
 import org.apache.geode.internal.cache.tier.sockets.Message;
@@ -70,9 +73,11 @@ public class Query extends BaseCommandQuery {
     }
     try {
       // Create query
+      final InternalCache cache = serverConnection.getCachedRegionHelper().getCache();
       QueryService queryService =
-          serverConnection.getCachedRegionHelper().getCache().getLocalQueryService();
+          cache.getLocalQueryService();
       org.apache.geode.cache.query.Query query = queryService.newQuery(queryString);
+      ExecutionContext executionContext = new QueryExecutionContext(null, cache, query);
       Set regionNames = ((DefaultQuery) query).getRegionsInQuery(null);
 
       // Authorization check
@@ -92,7 +97,7 @@ public class Query extends BaseCommandQuery {
       }
 
       processQuery(clientMessage, query, queryString, regionNames, start, null, queryContext,
-          serverConnection, true, securityService);
+          serverConnection, true, securityService, executionContext);
     } catch (QueryInvalidException e) {
       throw new QueryInvalidException(e.getMessage() + queryString);
     } catch (QueryExecutionLowMemoryException e) {

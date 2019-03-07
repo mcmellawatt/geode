@@ -80,7 +80,7 @@ public class PartitionedRegionQueryEvaluatorIntegrationTest {
 
     // running the algorithm and getting the list of bucktes to grab
     PartitionedRegionQueryEvaluator evalr =
-        new PartitionedRegionQueryEvaluator(pr.getSystem(), pr, null, null, null, bucketsToQuery);
+        new PartitionedRegionQueryEvaluator(pr.getSystem(), pr, null, null, null, bucketsToQuery, null);
     Map n2bMap = null;
     try {
       n2bMap = evalr.buildNodeToBucketMap();

@@ -135,7 +135,7 @@ public class PrimaryKeyIndex extends AbstractIndex {
         Iterator iter = values.iterator();
         while (iter.hasNext()) {
           // Check if query execution on this thread is canceled.
-          QueryMonitor.throwExceptionIfQueryOnCurrentThreadIsCanceled();
+          context.throwExceptionIfCanceled();
           addResultToResults(context, results, key, iter.next());
           if (limit != -1 && results.size() == limit) {
             observer.limitAppliedAtIndexLevel(this, limit, results);

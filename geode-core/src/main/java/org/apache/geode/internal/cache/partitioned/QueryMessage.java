@@ -32,8 +32,10 @@ import org.apache.geode.cache.query.QueryException;
 import org.apache.geode.cache.query.QueryExecutionLowMemoryException;
 import org.apache.geode.cache.query.Struct;
 import org.apache.geode.cache.query.internal.DefaultQuery;
+import org.apache.geode.cache.query.internal.ExecutionContext;
 import org.apache.geode.cache.query.internal.IndexTrackingQueryObserver;
 import org.apache.geode.cache.query.internal.PRQueryTraceInfo;
+import org.apache.geode.cache.query.internal.QueryExecutionContext;
 import org.apache.geode.cache.query.internal.QueryMonitor;
 import org.apache.geode.cache.query.internal.QueryObserver;
 import org.apache.geode.cache.query.internal.types.ObjectTypeImpl;
@@ -248,8 +250,6 @@ public class QueryMessage extends StreamingPartitionOperation.StreamingPartition
             "Query execution canceled due to memory threshold crossed in system, memory used: %s bytes.",
             QueryMonitor.getMemoryUsedBytes());
         throw new QueryExecutionLowMemoryException(reason);
-      } else if (query.isCanceled()) {
-        throw query.getQueryCanceledException();
       }
       super.operateOnPartitionedRegion(dm, pr, startTime);
     } finally {

@@ -47,14 +47,14 @@ public class QueryMonitorIntegrationTest {
   private static final int EXPIRE_QUICK_MILLIS = 1;
 
   private InternalCache cache;
-  private DefaultQuery query;
+  private ExecutionContext executionContext;
   private volatile CacheRuntimeException cacheRuntimeException;
   private volatile QueryExecutionCanceledException queryExecutionCanceledException;
 
   @Before
   public void before() {
     cache = mock(InternalCache.class);
-    query = mock(DefaultQuery.class);
+    executionContext = mock(ExecutionContext.class);
     cacheRuntimeException = null;
     queryExecutionCanceledException = null;
   }
@@ -73,15 +73,15 @@ public class QueryMonitorIntegrationTest {
           cache,
           NEVER_EXPIRE_MILLIS);
 
-      queryMonitor.monitorQueryThread(query);
+      queryMonitor.monitorQueryThread(executionContext);
 
       queryMonitor.setLowMemory(true, 1);
 
-      verify(query, times(1))
-          .setQueryCanceledException(any(QueryExecutionLowMemoryException.class));
+      verify(executionContext, times(1))
+          .setCanceledException(any(QueryExecutionLowMemoryException.class));
 
-      assertThatThrownBy(QueryMonitor::throwExceptionIfQueryOnCurrentThreadIsCanceled,
-          "Expected setLowMemory(true,_) to cancel query immediately, but it didn't.",
+      assertThatThrownBy(executionContext::throwExceptionIfCanceled,
+          "Expected setLowMemory(true,_) to cancel query execution immediately, but it didn't.",
           QueryExecutionCanceledException.class);
     } finally {
       if (queryMonitor != null) {
@@ -111,15 +111,15 @@ public class QueryMonitorIntegrationTest {
         cacheRuntimeException = (CacheRuntimeException) args[0];
       } else {
         throw new AssertionError(
-            "setQueryCanceledException() received argument that wasn't a CacheRuntimeException.");
+            "setCanceledException() received argument that wasn't a CacheRuntimeException.");
       }
       return null;
     };
 
-    doAnswer(processSetQueryCanceledException).when(query)
-        .setQueryCanceledException(any(CacheRuntimeException.class));
+    doAnswer(processSetQueryCanceledException).when(executionContext)
+        .setCanceledException(any(CacheRuntimeException.class));
 
-    startQueryThread(queryMonitor, query);
+    startQueryThread(queryMonitor, executionContext);
 
     GeodeAwaitility.await().until(() -> cacheRuntimeException != null);
 
@@ -130,21 +130,21 @@ public class QueryMonitorIntegrationTest {
   }
 
   private void startQueryThread(final QueryMonitor queryMonitor,
-      final DefaultQuery query) {
+      final ExecutionContext executionContext) {
 
     final Thread queryThread = new Thread(() -> {
-      queryMonitor.monitorQueryThread(query);
+      queryMonitor.monitorQueryThread(executionContext);
 
       while (true) {
         try {
-          QueryMonitor.throwExceptionIfQueryOnCurrentThreadIsCanceled();
+          executionContext.throwExceptionIfCanceled();
           Thread.sleep(5 * EXPIRE_QUICK_MILLIS);
         } catch (final QueryExecutionCanceledException e) {
           queryExecutionCanceledException = e;
           break;
         } catch (final InterruptedException e) {
           Thread.currentThread().interrupt();
-          throw new AssertionError("Simulated query thread unexpectedly interrupted.");
+          throw new AssertionError("Simulated query execution unexpectedly interrupted.");
         }
       }
     });

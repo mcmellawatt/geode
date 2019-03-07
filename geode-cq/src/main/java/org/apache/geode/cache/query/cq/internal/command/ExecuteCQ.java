@@ -24,6 +24,8 @@ import org.apache.geode.cache.query.CqException;
 import org.apache.geode.cache.query.Query;
 import org.apache.geode.cache.query.internal.DefaultQuery;
 import org.apache.geode.cache.query.internal.DefaultQueryService;
+import org.apache.geode.cache.query.internal.ExecutionContext;
+import org.apache.geode.cache.query.internal.QueryExecutionContext;
 import org.apache.geode.cache.query.internal.cq.CqService;
 import org.apache.geode.cache.query.internal.cq.ServerCQ;
 import org.apache.geode.distributed.internal.DistributionStats;
@@ -131,9 +133,11 @@ public class ExecuteCQ extends BaseCQCommand {
         query = qService.newQuery(cqQueryString);
         cqRegionNames = ((DefaultQuery) query).getRegionsInQuery(null);
       }
+      ExecutionContext executionContext = new QueryExecutionContext(null, crHelper.getCache(), query);
       ((DefaultQuery) query).setIsCqQuery(true);
       successQuery = processQuery(clientMessage, query, cqQueryString, cqRegionNames, start,
-          cqQuery, executeCQContext, serverConnection, sendResults, securityService);
+          cqQuery, executeCQContext, serverConnection, sendResults, securityService,
+          executionContext);
 
       // Update the CQ statistics.
       cqQuery.getVsdStats().setCqInitialResultsTime(DistributionStats.getStatTime() - start);

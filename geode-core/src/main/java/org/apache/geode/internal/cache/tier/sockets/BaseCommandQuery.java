@@ -29,6 +29,7 @@ import org.apache.geode.cache.query.SelectResults;
 import org.apache.geode.cache.query.Struct;
 import org.apache.geode.cache.query.internal.CqEntry;
 import org.apache.geode.cache.query.internal.DefaultQuery;
+import org.apache.geode.cache.query.internal.ExecutionContext;
 import org.apache.geode.cache.query.internal.cq.ServerCQ;
 import org.apache.geode.cache.query.internal.types.CollectionTypeImpl;
 import org.apache.geode.cache.query.internal.types.StructTypeImpl;
@@ -52,11 +53,13 @@ public abstract class BaseCommandQuery extends BaseCommand {
    * @return true if successful execution false in case of failure.
    */
   protected boolean processQuery(Message msg, Query query, String queryString, Set regionNames,
-      long start, ServerCQ cqQuery, QueryOperationContext queryContext, ServerConnection servConn,
-      boolean sendResults, final SecurityService securityService)
+                                 long start, ServerCQ cqQuery, QueryOperationContext queryContext,
+                                 ServerConnection servConn,
+                                 boolean sendResults, final SecurityService securityService,
+                                 final ExecutionContext executionContext)
       throws IOException, InterruptedException {
     return processQueryUsingParams(msg, query, queryString, regionNames, start, cqQuery,
-        queryContext, servConn, sendResults, null, securityService);
+        queryContext, servConn, sendResults, null, securityService, executionContext);
   }
 
   /**
@@ -65,9 +68,12 @@ public abstract class BaseCommandQuery extends BaseCommand {
    * @return true if successful execution false in case of failure.
    */
   protected boolean processQueryUsingParams(Message msg, Query query, String queryString,
-      Set regionNames, long start, ServerCQ cqQuery, QueryOperationContext queryContext,
-      ServerConnection servConn, boolean sendResults, Object[] params,
-      final SecurityService securityService) throws IOException, InterruptedException {
+                                            Set regionNames, long start, ServerCQ cqQuery,
+                                            QueryOperationContext queryContext,
+                                            ServerConnection servConn, boolean sendResults,
+                                            Object[] params,
+                                            final SecurityService securityService,
+                                            final ExecutionContext executionContext) throws IOException, InterruptedException {
     ChunkedMessage queryResponseMsg = servConn.getQueryResponseMessage();
     CacheServerStats stats = servConn.getCacheServerStats();
     CachedRegionHelper crHelper = servConn.getCachedRegionHelper();
@@ -263,8 +269,8 @@ public abstract class BaseCommandQuery extends BaseCommand {
       // Otherwise, write a query response and continue
       // Check if query got canceled from QueryMonitor.
       DefaultQuery defaultQuery = (DefaultQuery) query;
-      if ((defaultQuery).isCanceled()) {
-        e = new QueryException(defaultQuery.getQueryCanceledException().getMessage(),
+      if (executionContext.isCanceled()) {
+        e = new QueryException(executionContext.getCanceledException().getMessage(),
             e.getCause());
       }
       writeQueryResponseException(msg, e, servConn);

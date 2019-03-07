@@ -180,7 +180,8 @@ public class ExecuteCQ61 extends BaseCQCommand {
         }
         ((DefaultQuery) query).setIsCqQuery(true);
         successQuery = processQuery(clientMessage, query, cqQueryString, cqRegionNames, start,
-            cqQuery, executeCQContext, serverConnection, sendResults, securityService);
+            cqQuery, executeCQContext, serverConnection, sendResults, securityService,
+            executionContext);
 
 
         // Update the CQ statistics.

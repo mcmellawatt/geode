@@ -119,6 +119,7 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
   private final PartitionedRegion pr;
   private volatile Map<InternalDistributedMember, List<Integer>> node2bucketIds;
   private final DefaultQuery query;
+  private final ExecutionContext executionContext;
   private final Object[] parameters;
   private SelectResults cumulativeResults;
   /**
@@ -134,19 +135,22 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
 
   /**
    * Construct a PartitionedRegionQueryEvaluator
-   *
-   * @param sys the distributed system
+   *  @param sys the distributed system
    * @param pr the partitioned region
    * @param query the query
    * @param parameters the parameters for executing the query
    * @param cumulativeResults where to add the results as they come in
+   * @param executionContext
    */
   public PartitionedRegionQueryEvaluator(InternalDistributedSystem sys, PartitionedRegion pr,
-      DefaultQuery query, Object[] parameters, SelectResults cumulativeResults,
-      Set<Integer> bucketsToQuery) {
+                                         DefaultQuery query, Object[] parameters,
+                                         SelectResults cumulativeResults,
+                                         Set<Integer> bucketsToQuery,
+                                         final ExecutionContext executionContext) {
     super(sys, pr.getPRId());
     this.pr = pr;
     this.query = query;
+    this.executionContext = executionContext;
     this.parameters = parameters;
     this.cumulativeResults = cumulativeResults;
     this.bucketsToQuery = bucketsToQuery;
@@ -228,7 +232,7 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
     }
 
     synchronized (results) {
-      if (!QueryMonitor.isLowMemory() && !this.query.isCanceled()) {
+      if (!QueryMonitor.isLowMemory() && !executionContext.isCanceled()) {
         results.add(objects);
       } else {
         if (logger.isDebugEnabled()) {
@@ -237,11 +241,11 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
         if (QueryMonitor.isLowMemory()) {
           String reason =
               "Query execution canceled due to low memory while gathering results from partitioned regions";
-          query.setQueryCanceledException(new QueryExecutionLowMemoryException(reason));
+          executionContext.setCanceledException(new QueryExecutionLowMemoryException(reason));
         } else {
           if (logger.isDebugEnabled()) {
             logger.debug("query cancelled while gathering results, aborting due to exception "
-                + query.getQueryCanceledException());
+                + executionContext.getCanceledException());
           }
         }
         return false;
@@ -421,9 +425,7 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
       }
     }
 
-    if (query.isCanceled()) {
-      throw query.getQueryCanceledException();
-    }
+    executionContext.throwExceptionIfCanceled();
 
     if (localFault != null) {
       if (localFault instanceof QueryException) {
@@ -759,14 +761,14 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
     if (QueryMonitor.isLowMemory()) {
       String reason =
           "Query execution canceled due to low memory while gathering results from partitioned regions";
-      query.setQueryCanceledException(new QueryExecutionLowMemoryException(reason));
+      executionContext.setCanceledException(new QueryExecutionLowMemoryException(reason));
       if (DefaultQuery.testHook != null) {
         DefaultQuery.testHook
             .doTestHook(DefaultQuery.TestHook.SPOTS.BEFORE_THROW_QUERY_CANCELED_EXCEPTION, null);
       }
-      throw query.getQueryCanceledException();
-    } else if (query.isCanceled()) {
-      throw query.getQueryCanceledException();
+      throw executionContext.getCanceledException();
+    } else {
+      executionContext.throwExceptionIfCanceled();
     }
   }
 
@@ -1102,7 +1104,7 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
         if (m.isCanceled()) {
           String reason =
               "Query execution canceled due to low memory while gathering results from partitioned regions";
-          query.setQueryCanceledException(new QueryExecutionLowMemoryException(reason));
+          executionContext.setCanceledException(new QueryExecutionLowMemoryException(reason));
           this.abort = true;
         }
 

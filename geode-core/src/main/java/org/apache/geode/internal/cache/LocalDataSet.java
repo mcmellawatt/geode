@@ -52,6 +52,8 @@ import org.apache.geode.cache.query.QueryService;
 import org.apache.geode.cache.query.SelectResults;
 import org.apache.geode.cache.query.TypeMismatchException;
 import org.apache.geode.cache.query.internal.DefaultQuery;
+import org.apache.geode.cache.query.internal.ExecutionContext;
+import org.apache.geode.cache.query.internal.QueryExecutionContext;
 import org.apache.geode.cache.query.internal.QueryExecutor;
 import org.apache.geode.cache.query.internal.QueryObserver;
 import org.apache.geode.cache.snapshot.RegionSnapshotService;
@@ -141,8 +143,9 @@ public class LocalDataSet implements Region, QueryExecutor {
     QueryService qs = getCache().getLocalQueryService();
     DefaultQuery query = (DefaultQuery) qs
         .newQuery("select * from " + getFullPath() + " this where " + queryPredicate);
+    ExecutionContext executionContext = new QueryExecutionContext(null, getCache(), query);
     Object[] params = null;
-    return (SelectResults) this.executeQuery(query, params, getBucketSet());
+    return (SelectResults) this.executeQuery(query, params, getBucketSet(), executionContext);
   }
 
   @Override
@@ -170,7 +173,8 @@ public class LocalDataSet implements Region, QueryExecutor {
    * MULTI REGION PR BASED QUERIES.
    */
   @Override
-  public Object executeQuery(DefaultQuery query, Object[] parameters, Set buckets)
+  public Object executeQuery(DefaultQuery query, Object[] parameters, Set buckets,
+                             ExecutionContext executionContext)
       throws FunctionDomainException, TypeMismatchException, NameResolutionException,
       QueryInvocationTargetException {
     long startTime = 0L;
@@ -183,7 +187,7 @@ public class LocalDataSet implements Region, QueryExecutor {
     QueryObserver indexObserver = query.startTrace();
 
     try {
-      result = this.proxy.executeQuery(query, parameters, buckets);
+      result = this.proxy.executeQuery(query, parameters, buckets, executionContext);
     } finally {
       query.endTrace(indexObserver, startTime, result);
     }

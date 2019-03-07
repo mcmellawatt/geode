@@ -124,7 +124,7 @@ public class PRQueryDUnitTest extends CacheTestCase {
     PartitionedRegion partitionedRegion = (PartitionedRegion) region;
     PartitionedRegionQueryEvaluator queryEvaluator =
         new PartitionedRegionQueryEvaluator(partitionedRegion.getSystem(), partitionedRegion, query,
-            EMPTY_PARAMETERS, results, buckets);
+            EMPTY_PARAMETERS, results, buckets, );
 
     DisconnectingTestHook testHook = new DisconnectingTestHook();
     assertThatThrownBy(() -> queryEvaluator.queryBuckets(testHook))
@@ -170,7 +170,7 @@ public class PRQueryDUnitTest extends CacheTestCase {
         PartitionedRegion partitionedRegion = (PartitionedRegion) region;
         PartitionedRegionQueryEvaluator queryEvaluator =
             new PartitionedRegionQueryEvaluator(partitionedRegion.getSystem(), partitionedRegion,
-                query, EMPTY_PARAMETERS, results, bucketsToQuery);
+                query, EMPTY_PARAMETERS, results, bucketsToQuery, );
 
         CollatingTestHook testHook = new CollatingTestHook(queryEvaluator);
         queryEvaluator.queryBuckets(testHook);
@@ -218,7 +218,7 @@ public class PRQueryDUnitTest extends CacheTestCase {
       PartitionedRegion partitionedRegion = (PartitionedRegion) region;
       PartitionedRegionQueryEvaluator queryEvaluator =
           new PartitionedRegionQueryEvaluator(partitionedRegion.getSystem(), partitionedRegion,
-              query, EMPTY_PARAMETERS, results, buckets);
+              query, EMPTY_PARAMETERS, results, buckets, );
 
       CollatingTestHook testHook = new CollatingTestHook(queryEvaluator);
       queryEvaluator.queryBuckets(testHook);
@@ -270,7 +270,7 @@ public class PRQueryDUnitTest extends CacheTestCase {
       PartitionedRegion partitionedRegion = (PartitionedRegion) region;
       PartitionedRegionQueryEvaluator queryEvaluator =
           new PartitionedRegionQueryEvaluator(partitionedRegion.getSystem(), partitionedRegion,
-              query, EMPTY_PARAMETERS, results, buckets);
+              query, EMPTY_PARAMETERS, results, buckets, );
 
       assertThatThrownBy(() -> queryEvaluator.queryBuckets(null))
           .isInstanceOf(QueryException.class);

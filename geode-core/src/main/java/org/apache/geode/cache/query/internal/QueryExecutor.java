@@ -27,8 +27,8 @@ import org.apache.geode.cache.query.TypeMismatchException;
  * @since GemFire 5.5
  */
 public interface QueryExecutor {
-  // TODO Yogesh , fix this signature
-  Object executeQuery(DefaultQuery query, Object[] parameters, Set buckets)
+  Object executeQuery(DefaultQuery query, Object[] parameters, Set buckets,
+                      ExecutionContext executionContext)
       throws FunctionDomainException, TypeMismatchException, NameResolutionException,
       QueryInvocationTargetException;
 

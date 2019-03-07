@@ -21,9 +21,13 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.Stack;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.geode.cache.CacheRuntimeException;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.query.AmbiguousNameException;
 import org.apache.geode.cache.query.NameResolutionException;
@@ -91,6 +95,8 @@ public class ExecutionContext {
   private boolean distinct = false;
   private Object currentProjectionField = null;
   private boolean isPRQueryNode = false;
+  private Optional<ScheduledFuture> cancelationTask;
+  private volatile CacheRuntimeException queryCancelledException;
 
   /**
    * Param specialIteratorVar name of special variable to use to denote the current iteration
@@ -101,10 +107,47 @@ public class ExecutionContext {
   public ExecutionContext(Object[] bindArguments, InternalCache cache) {
     this.bindArguments = bindArguments;
     this.cache = cache;
+    this.cancelationTask = Optional.empty();
+  }
+
+  Optional<ScheduledFuture> getCancelationTask() {
+    return cancelationTask;
+  }
+
+  void setCancelationTask(final ScheduledFuture cancelationTask) {
+    this.cancelationTask = Optional.of(cancelationTask);
   }
 
   public CachePerfStats getCachePerfStats() {
     return this.cache.getCachePerfStats();
+  }
+
+  public boolean isCanceled() {
+    return queryCancelledException != null;
+  }
+
+  public CacheRuntimeException getCanceledException() {
+    return queryCancelledException;
+  }
+
+  /**
+   * The query gets canceled by the QueryMonitor with the reason being specified
+   */
+  public void setCanceledException(final CacheRuntimeException queryCanceledException) {
+    this.queryCancelledException = queryCanceledException;
+  }
+
+  /**
+   * Throw an exception if the query has been canceled. The {@link QueryMonitor} cancels the query
+   * if it takes more than the max query execution time or in low memory situations where critical
+   * heap percentage has been set on the resource manager.
+   *
+   * @throws QueryExecutionCanceledException if the query has been canceled
+   */
+  public void throwExceptionIfCanceled() {
+    if (queryCancelledException != null) {
+      throw queryCancelledException;
+    }
   }
 
   /**
@@ -646,5 +689,4 @@ public class ExecutionContext {
   public boolean getIsPRQueryNode() {
     return this.isPRQueryNode;
   }
-
 }

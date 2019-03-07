@@ -22,16 +22,12 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.LongAdder;
 
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.annotations.internal.MakeNotStatic;
 import org.apache.geode.annotations.internal.MutableForTesting;
-import org.apache.geode.cache.CacheRuntimeException;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.internal.ProxyCache;
 import org.apache.geode.cache.client.internal.ServerProxy;
@@ -82,8 +78,6 @@ public class DefaultQuery implements Query {
 
   private final QueryStatistics stats;
 
-  private Optional<ScheduledFuture> cancelationTask;
-
   private boolean traceOn = false;
 
   @Immutable
@@ -109,8 +103,6 @@ public class DefaultQuery implements Query {
    * blocking queue.
    */
   public static final Object NULL_RESULT = new Object();
-
-  private volatile CacheRuntimeException queryCancelledException;
 
   private ProxyCache proxyCache;
 
@@ -155,23 +147,12 @@ public class DefaultQuery implements Query {
   private static final ThreadLocal<Map<String, Set<String>>> pdxClassToMethodsMap =
       ThreadLocal.withInitial(HashMap::new);
 
-  static final ThreadLocal<AtomicBoolean> queryCanceled =
-      ThreadLocal.withInitial(AtomicBoolean::new);
-
   public static void setPdxClasstoMethodsmap(Map<String, Set<String>> map) {
     pdxClassToMethodsMap.set(map);
   }
 
   public static Map<String, Set<String>> getPdxClasstoMethodsmap() {
     return pdxClassToMethodsMap.get();
-  }
-
-  public Optional<ScheduledFuture> getCancelationTask() {
-    return cancelationTask;
-  }
-
-  public void setCancelationTask(final ScheduledFuture cancelationTask) {
-    this.cancelationTask = Optional.of(cancelationTask);
   }
 
   /**
@@ -195,7 +176,6 @@ public class DefaultQuery implements Query {
     this.traceOn = compiler.isTraceRequested() || QUERY_VERBOSE;
     this.cache = cache;
     this.stats = new DefaultQueryStatistics();
-    this.cancelationTask = Optional.empty();
   }
 
   /**
@@ -247,10 +227,11 @@ public class DefaultQuery implements Query {
 
     Object result = null;
     Boolean initialPdxReadSerialized = this.cache.getPdxReadSerializedOverride();
+    // Setting the readSerialized flag for local queries
+    this.cache.setPdxReadSerializedOverride(true);
+    ExecutionContext context = new QueryExecutionContext(params, this.cache, this);
+
     try {
-      // Setting the readSerialized flag for local queries
-      this.cache.setPdxReadSerializedOverride(true);
-      ExecutionContext context = new QueryExecutionContext(params, this.cache, this);
       indexObserver = this.startTrace();
       if (qe != null) {
         if (DefaultQuery.testHook != null) {
@@ -258,7 +239,7 @@ public class DefaultQuery implements Query {
               this);
         }
 
-        result = qe.executeQuery(this, params, null);
+        result = qe.executeQuery(this, params, null, context);
         // For local queries returning pdx objects wrap the resultset with
         // ResultsCollectionPdxDeserializerWrapper
         // which deserializes these pdx objects.
@@ -278,7 +259,7 @@ public class DefaultQuery implements Query {
         // Add current thread to be monitored by QueryMonitor.
         // In case of partitioned region it will be added before the query execution
         // starts on the Local Buckets.
-        queryMonitor.monitorQueryThread(this);
+        queryMonitor.monitorQueryThread(context);
       }
 
       context.setCqQueryContext(this.isCqQuery);
@@ -316,31 +297,12 @@ public class DefaultQuery implements Query {
         }
       }
       return result;
-    } catch (QueryExecutionCanceledException ignore) {
-      return reinterpretQueryExecutionCanceledException();
     } finally {
       this.cache.setPdxReadSerializedOverride(initialPdxReadSerialized);
       if (queryMonitor != null) {
-        queryMonitor.stopMonitoringQueryThread(this);
+        queryMonitor.stopMonitoringQueryThread(context);
       }
       this.endTrace(indexObserver, startTime, result);
-    }
-  }
-
-  /**
-   * This method attempts to reintrepret a {@link QueryExecutionCanceledException} using the
-   * the value returned by {@link #getQueryCanceledException} (set by the {@link QueryMonitor}).
-   *
-   * @throws if {@link #getQueryCanceledException} doesn't return {@code null} then throw that
-   *         {@link CacheRuntimeException}, otherwise throw {@link QueryExecutionCanceledException}
-   */
-  private Object reinterpretQueryExecutionCanceledException() {
-    final CacheRuntimeException queryCanceledException = getQueryCanceledException();
-    if (queryCanceledException != null) {
-      throw queryCanceledException;
-    } else {
-      throw new QueryExecutionCanceledException(
-          "Query was canceled. It may be due to low memory or the query was running longer than the MAX_QUERY_EXECUTION_TIME.");
     }
   }
 
@@ -413,7 +375,7 @@ public class DefaultQuery implements Query {
     // QueryMonitor Service.
     if (queryMonitor != null && PRQueryProcessor.NUM_THREADS > 1) {
       // Add current thread to be monitored by QueryMonitor.
-      queryMonitor.monitorQueryThread(this);
+      queryMonitor.monitorQueryThread(context);
     }
 
     Object result = null;
@@ -421,7 +383,7 @@ public class DefaultQuery implements Query {
       result = executeUsingContext(context);
     } finally {
       if (queryMonitor != null && PRQueryProcessor.NUM_THREADS > 1) {
-        queryMonitor.stopMonitoringQueryThread(this);
+        queryMonitor.stopMonitoringQueryThread(context);
       }
 
       int resultSize = 0;
@@ -465,8 +427,6 @@ public class DefaultQuery implements Query {
           testHook.doTestHook(DefaultQuery.TestHook.SPOTS.BEFORE_QUERY_EXECUTION, this);
         }
         results = this.compiledQuery.evaluate(context);
-      } catch (QueryExecutionCanceledException ignore) {
-        reinterpretQueryExecutionCanceledException();
       } finally {
         observer.afterQueryEvaluation(results);
       }
@@ -477,7 +437,6 @@ public class DefaultQuery implements Query {
       updateStatistics(endTime - startTime);
       pdxClassToFieldsMap.remove();
       pdxClassToMethodsMap.remove();
-      queryCanceled.remove();
       ((TXManagerImpl) this.cache.getCacheTransactionManager()).unpauseTransaction(tx);
     }
   }
@@ -706,25 +665,6 @@ public class DefaultQuery implements Query {
     this.serverProxy = serverProxy;
   }
 
-  /**
-   * Check to see if the query execution got canceled. The query gets canceled by the QueryMonitor
-   * if it takes more than the max query execution time or low memory situations
-   */
-  public boolean isCanceled() {
-    return getQueryCanceledException() != null;
-  }
-
-  public CacheRuntimeException getQueryCanceledException() {
-    return queryCancelledException;
-  }
-
-  /**
-   * The query gets canceled by the QueryMonitor with the reason being specified
-   */
-  public void setQueryCanceledException(final CacheRuntimeException queryCanceledException) {
-    this.queryCancelledException = queryCanceledException;
-  }
-
   public void setIsCqQuery(boolean isCqQuery) {
     this.isCqQuery = isCqQuery;
   }
@@ -753,9 +693,6 @@ public class DefaultQuery implements Query {
   public String toString() {
     StringBuilder sb = new StringBuilder("Query String = ");
     sb.append(this.queryString);
-    sb.append(';');
-    sb.append("isCancelled = ");
-    sb.append(this.isCanceled());
     sb.append("; Total Executions = ");
     sb.append(this.numExecutions);
     sb.append("; Total Execution Time = ");
@@ -886,7 +823,8 @@ public class DefaultQuery implements Query {
         LocalDataSet localDataSet =
             (LocalDataSet) PartitionRegionHelper.getLocalDataForContext(context);
         Set<Integer> buckets = localDataSet.getBucketSet();
-        result = qe.executeQuery(this, params, buckets);
+        ExecutionContext executionContext = new QueryExecutionContext(null, cache, this);
+        result = qe.executeQuery(this, params, buckets, executionContext);
         return result;
       } else {
         // Not supported on regions other than PartitionRegion.

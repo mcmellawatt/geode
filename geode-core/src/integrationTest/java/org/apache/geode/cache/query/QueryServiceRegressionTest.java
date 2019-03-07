@@ -442,7 +442,7 @@ public class QueryServiceRegressionTest {
     String query =
         "select distinct e1.value from /pr1 e1, " + "/pr2  e2" + " where e1.value=e2.value";
     DefaultQuery cury = (DefaultQuery) CacheUtils.getQueryService().newQuery(query);
-    SelectResults r = (SelectResults) lds.executeQuery(cury, null, set);
+    SelectResults r = (SelectResults) lds.executeQuery(cury, null, set, );
 
     if (!observer.isIndexesUsed) {
       fail("Indexes should have been used");
@@ -513,7 +513,7 @@ public class QueryServiceRegressionTest {
     String query =
         "select distinct e1.key from /pr1.entries e1,/pr2.entries  e2" + " where e1.value=e2.value";
     DefaultQuery cury = (DefaultQuery) CacheUtils.getQueryService().newQuery(query);
-    SelectResults r = (SelectResults) lds.executeQuery(cury, null, set);
+    SelectResults r = (SelectResults) lds.executeQuery(cury, null, set, );
 
     if (!observer.isIndexesUsed) {
       fail("Indexes should have been used");

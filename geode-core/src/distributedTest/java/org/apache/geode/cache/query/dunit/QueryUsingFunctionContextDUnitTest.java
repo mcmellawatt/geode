@@ -675,7 +675,7 @@ public class QueryUsingFunctionContextDUnitTest extends JUnit4CacheTestCase {
         Query query = queryService.newQuery((String) args[0]);
         context.getResultSender()
             .lastResult((ArrayList) ((SelectResults) ((LocalDataSet) localDataSet)
-                .executeQuery((DefaultQuery) query, null, buckets)).asList());
+                .executeQuery((DefaultQuery) query, null, buckets, )).asList());
       } catch (Exception e) {
         throw new FunctionException(e);
       }
@@ -869,7 +869,7 @@ public class QueryUsingFunctionContextDUnitTest extends JUnit4CacheTestCase {
     SelectResults results;
     try {
       results = (SelectResults) ((LocalDataSet) localDataSet).executeQuery((DefaultQuery) query,
-          null, buckets);
+          null, buckets, );
 
       return (ArrayList) results.asList();
     } catch (Exception e) {

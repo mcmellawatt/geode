@@ -227,9 +227,6 @@ public class SortedStructBag extends SortedResultsBag<Object[]> implements Struc
     }
 
     for (Iterator itr = sb.fieldValuesIterator(); itr.hasNext();) {
-      // Check if query execution on this thread is canceled.
-      QueryMonitor.throwExceptionIfQueryOnCurrentThreadIsCanceled();
-
       Object[] vals = (Object[]) itr.next();
       if (super.add(vals)) {
         modified = true;

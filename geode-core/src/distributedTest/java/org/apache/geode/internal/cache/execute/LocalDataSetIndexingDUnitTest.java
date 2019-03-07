@@ -175,7 +175,7 @@ public class LocalDataSetIndexingDUnitTest extends JUnit4CacheTestCase {
                   }
 
                   SelectResults r =
-                      (SelectResults) localCust.executeQuery(query, null, localCust.getBucketSet());
+                      (SelectResults) localCust.executeQuery(query, null, localCust.getBucketSet(), );
 
                   GemFireCacheImpl.getInstance().getLogger().fine("Result :" + r.asList());
 

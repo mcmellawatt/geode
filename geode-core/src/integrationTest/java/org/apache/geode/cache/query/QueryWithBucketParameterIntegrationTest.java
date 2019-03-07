@@ -105,14 +105,14 @@ public class QueryWithBucketParameterIntegrationTest {
 
   @Test
   public void testQueryExecuteWithEmptyBucketListExpectNoResults() throws Exception {
-    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, new HashSet<Integer>());
+    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, new HashSet<Integer>(), );
     assertTrue("Received: A non-empty result collection, expected : Empty result collection",
         r.isEmpty());
   }
 
   @Test
   public void testQueryExecuteWithNullBucketListExpectNonEmptyResultSet() throws Exception {
-    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, null);
+    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, null, );
     assertFalse("Received: An empty result collection, expected : Non-empty result collection",
         r.isEmpty());
   }
@@ -121,7 +121,7 @@ public class QueryWithBucketParameterIntegrationTest {
   public void testQueryExecuteWithNonEmptyBucketListExpectNonEmptyResultSet() throws Exception {
     int nTestBucketNumber = 15;
     Set<Integer> nonEmptySet = createAndPopulateSet(nTestBucketNumber);
-    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, nonEmptySet);
+    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, nonEmptySet, );
     assertFalse("Received: An empty result collection, expected : Non-empty result collection",
         r.isEmpty());
   }
@@ -131,6 +131,6 @@ public class QueryWithBucketParameterIntegrationTest {
       throws Exception {
     int nTestBucketNumber = 45;
     Set<Integer> overflowSet = createAndPopulateSet(nTestBucketNumber);
-    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, overflowSet);
+    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, overflowSet, );
   }
 }

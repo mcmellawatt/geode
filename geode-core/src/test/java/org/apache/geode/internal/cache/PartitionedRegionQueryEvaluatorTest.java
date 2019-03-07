@@ -216,7 +216,7 @@ public class PartitionedRegionQueryEvaluatorTest {
     List bucketList = createBucketList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     Set bucketSet = new HashSet(bucketList);
     PartitionedRegionQueryEvaluator prqe = new PartitionedRegionQueryEvaluator(system, pr, query,
-        null, new LinkedResultSet(), bucketSet);
+        null, new LinkedResultSet(), bucketSet, );
     RegionAdvisor regionAdvisor = mock(RegionAdvisor.class);
     when(regionAdvisor.adviseDataStore()).thenReturn(bucketSet);
     await()
@@ -291,7 +291,7 @@ public class PartitionedRegionQueryEvaluatorTest {
         PartitionedRegion pr, DefaultQuery query, Object[] parameters,
         SelectResults cumulativeResults, Set<Integer> bucketsToQuery,
         Queue<PartitionedQueryScenario> scenarios) {
-      super(sys, pr, query, parameters, cumulativeResults, bucketsToQuery);
+      super(sys, pr, query, parameters, cumulativeResults, bucketsToQuery, );
       this.scenarios = scenarios;
       extendedPRQueryProcessor =
           new ExtendedPRQueryProcessor(pr, query, null, new LinkedList(bucketsToQuery));
