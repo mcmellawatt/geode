@@ -41,6 +41,7 @@ import org.apache.geode.cache.query.SelectResults;
 import org.apache.geode.cache.query.internal.CompiledSelect;
 import org.apache.geode.cache.query.internal.CompiledValue;
 import org.apache.geode.cache.query.internal.DefaultQuery;
+import org.apache.geode.cache.query.internal.ExecutionContext;
 import org.apache.geode.cache.query.internal.LinkedResultSet;
 import org.apache.geode.cache.query.internal.types.ObjectTypeImpl;
 import org.apache.geode.distributed.internal.DistributionMessage;
@@ -58,6 +59,7 @@ public class PartitionedRegionQueryEvaluatorTest {
   private InternalDistributedSystem system;
   private PartitionedRegion pr;
   private DefaultQuery query;
+  private ExecutionContext executionContext;
   // Needed to help mock out certain scenarios
   private ExtendedPartitionedRegionDataStore dataStore;
   // This is the set of nodes that remain after a failure
@@ -89,7 +91,7 @@ public class PartitionedRegionQueryEvaluatorTest {
     when(pr.getMyId()).thenReturn(localNode);
     when(pr.getDataStore()).thenReturn(dataStore);
     when(pr.getCache()).thenReturn(cache);
-
+    executionContext = mock(ExecutionContext.class);
   }
 
   @Test
@@ -114,7 +116,7 @@ public class PartitionedRegionQueryEvaluatorTest {
     dataStore.setScenarios(scenarios);
 
     PartitionedRegionQueryEvaluator prqe = new ExtendedPartitionedRegionQueryEvaluator(system, pr,
-        query, null, new LinkedResultSet(), allBucketsToQuery, scenarios);
+        query, null, new LinkedResultSet(), allBucketsToQuery, scenarios, executionContext);
     Collection results = prqe.queryBuckets(null).asList();
     assertNotNull(results);
     assertEquals(resultsForMember1.size(), results.size());
@@ -145,7 +147,7 @@ public class PartitionedRegionQueryEvaluatorTest {
     dataStore.setScenarios(scenarios);
 
     PartitionedRegionQueryEvaluator prqe = new ExtendedPartitionedRegionQueryEvaluator(system, pr,
-        query, null, new LinkedResultSet(), allBucketsToQuery, scenarios);
+        query, null, new LinkedResultSet(), allBucketsToQuery, scenarios, executionContext);
     Collection results = prqe.queryBuckets(null).asList();
     List expectedResults = new LinkedList();
     expectedResults.addAll(resultsForMember1);
@@ -198,7 +200,7 @@ public class PartitionedRegionQueryEvaluatorTest {
     dataStore.setScenarios(scenarios);
 
     PartitionedRegionQueryEvaluator prqe = new ExtendedPartitionedRegionQueryEvaluator(system, pr,
-        query, null, new LinkedResultSet(), allBucketsToQuery, scenarios);
+        query, null, new LinkedResultSet(), allBucketsToQuery, scenarios, executionContext);
     Collection results = prqe.queryBuckets(null).asList();
 
     List expectedResults = new LinkedList();
@@ -216,7 +218,7 @@ public class PartitionedRegionQueryEvaluatorTest {
     List bucketList = createBucketList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     Set bucketSet = new HashSet(bucketList);
     PartitionedRegionQueryEvaluator prqe = new PartitionedRegionQueryEvaluator(system, pr, query,
-        null, new LinkedResultSet(), bucketSet, );
+        null, new LinkedResultSet(), bucketSet, executionContext);
     RegionAdvisor regionAdvisor = mock(RegionAdvisor.class);
     when(regionAdvisor.adviseDataStore()).thenReturn(bucketSet);
     await()
@@ -290,8 +292,8 @@ public class PartitionedRegionQueryEvaluatorTest {
     public ExtendedPartitionedRegionQueryEvaluator(InternalDistributedSystem sys,
         PartitionedRegion pr, DefaultQuery query, Object[] parameters,
         SelectResults cumulativeResults, Set<Integer> bucketsToQuery,
-        Queue<PartitionedQueryScenario> scenarios) {
-      super(sys, pr, query, parameters, cumulativeResults, bucketsToQuery, );
+        Queue<PartitionedQueryScenario> scenarios, ExecutionContext executionContext) {
+      super(sys, pr, query, parameters, cumulativeResults, bucketsToQuery, executionContext);
       this.scenarios = scenarios;
       extendedPRQueryProcessor =
           new ExtendedPRQueryProcessor(pr, query, null, new LinkedList(bucketsToQuery));

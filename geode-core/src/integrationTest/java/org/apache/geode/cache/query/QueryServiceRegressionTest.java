@@ -42,9 +42,12 @@ import org.apache.geode.cache.query.data.Portfolio;
 import org.apache.geode.cache.query.data.Position;
 import org.apache.geode.cache.query.data.TestData.MyValue;
 import org.apache.geode.cache.query.internal.DefaultQuery;
+import org.apache.geode.cache.query.internal.ExecutionContext;
+import org.apache.geode.cache.query.internal.QueryExecutionContext;
 import org.apache.geode.cache.query.internal.QueryObserverAdapter;
 import org.apache.geode.cache.query.internal.QueryObserverHolder;
 import org.apache.geode.cache.query.internal.QueryUtils;
+import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.internal.cache.LocalDataSet;
 import org.apache.geode.internal.cache.PartitionedRegion;
 import org.apache.geode.test.junit.categories.OQLQueryTest;
@@ -58,7 +61,7 @@ public class QueryServiceRegressionTest {
   private Region region;
   private Region region1;
   private QueryService qs;
-  private Cache cache;
+  private InternalCache cache;
 
   @Before
   public void setUp() throws Exception {
@@ -442,7 +445,8 @@ public class QueryServiceRegressionTest {
     String query =
         "select distinct e1.value from /pr1 e1, " + "/pr2  e2" + " where e1.value=e2.value";
     DefaultQuery cury = (DefaultQuery) CacheUtils.getQueryService().newQuery(query);
-    SelectResults r = (SelectResults) lds.executeQuery(cury, null, set, );
+    ExecutionContext executionContext = new QueryExecutionContext(null, cache, cury);
+    SelectResults r = (SelectResults) lds.executeQuery(cury, null, set, executionContext);
 
     if (!observer.isIndexesUsed) {
       fail("Indexes should have been used");
@@ -513,7 +517,8 @@ public class QueryServiceRegressionTest {
     String query =
         "select distinct e1.key from /pr1.entries e1,/pr2.entries  e2" + " where e1.value=e2.value";
     DefaultQuery cury = (DefaultQuery) CacheUtils.getQueryService().newQuery(query);
-    SelectResults r = (SelectResults) lds.executeQuery(cury, null, set, );
+    ExecutionContext executionContext = new QueryExecutionContext(null, cache, cury);
+    SelectResults r = (SelectResults) lds.executeQuery(cury, null, set, executionContext);
 
     if (!observer.isIndexesUsed) {
       fail("Indexes should have been used");

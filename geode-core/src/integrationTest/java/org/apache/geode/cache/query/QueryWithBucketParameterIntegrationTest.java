@@ -36,6 +36,9 @@ import org.apache.geode.cache.PartitionResolver;
 import org.apache.geode.cache.RegionFactory;
 import org.apache.geode.cache.RegionShortcut;
 import org.apache.geode.cache.query.internal.DefaultQuery;
+import org.apache.geode.cache.query.internal.ExecutionContext;
+import org.apache.geode.cache.query.internal.QueryExecutionContext;
+import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.internal.cache.LocalDataSet;
 import org.apache.geode.internal.cache.PartitionedRegion;
 import org.apache.geode.test.junit.categories.OQLQueryTest;
@@ -49,6 +52,7 @@ import org.apache.geode.test.junit.categories.OQLQueryTest;
 @Category({OQLQueryTest.class})
 public class QueryWithBucketParameterIntegrationTest {
   DefaultQuery queryExecutor;
+  ExecutionContext executionContext;
   LocalDataSet lds;
 
   public QueryWithBucketParameterIntegrationTest() {}
@@ -59,7 +63,7 @@ public class QueryWithBucketParameterIntegrationTest {
     int totalBuckets = 40;
     int numValues = 80;
     CacheUtils.startCache();
-    Cache cache = CacheUtils.getCache();
+    InternalCache cache = CacheUtils.getCache();
     PartitionAttributesFactory pAFactory =
         getPartitionAttributesFactoryWithPartitionResolver(totalBuckets);
     RegionFactory rf = cache.createRegionFactory(RegionShortcut.PARTITION);
@@ -69,6 +73,7 @@ public class QueryWithBucketParameterIntegrationTest {
     QueryService qs = pr1.getCache().getQueryService();
     String query = "select distinct e1.value from /pr1 e1";
     queryExecutor = (DefaultQuery) CacheUtils.getQueryService().newQuery(query);
+    executionContext = new QueryExecutionContext(null, cache, queryExecutor);
     Set<Integer> set = createAndPopulateSet(totalBuckets);
     lds = new LocalDataSet(pr1, set);
   }
@@ -105,14 +110,14 @@ public class QueryWithBucketParameterIntegrationTest {
 
   @Test
   public void testQueryExecuteWithEmptyBucketListExpectNoResults() throws Exception {
-    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, new HashSet<Integer>(), );
+    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, new HashSet<Integer>(), executionContext);
     assertTrue("Received: A non-empty result collection, expected : Empty result collection",
         r.isEmpty());
   }
 
   @Test
   public void testQueryExecuteWithNullBucketListExpectNonEmptyResultSet() throws Exception {
-    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, null, );
+    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, null, executionContext);
     assertFalse("Received: An empty result collection, expected : Non-empty result collection",
         r.isEmpty());
   }
@@ -121,7 +126,7 @@ public class QueryWithBucketParameterIntegrationTest {
   public void testQueryExecuteWithNonEmptyBucketListExpectNonEmptyResultSet() throws Exception {
     int nTestBucketNumber = 15;
     Set<Integer> nonEmptySet = createAndPopulateSet(nTestBucketNumber);
-    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, nonEmptySet, );
+    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, nonEmptySet, executionContext);
     assertFalse("Received: An empty result collection, expected : Non-empty result collection",
         r.isEmpty());
   }
@@ -131,6 +136,6 @@ public class QueryWithBucketParameterIntegrationTest {
       throws Exception {
     int nTestBucketNumber = 45;
     Set<Integer> overflowSet = createAndPopulateSet(nTestBucketNumber);
-    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, overflowSet, );
+    SelectResults r = (SelectResults) lds.executeQuery(queryExecutor, null, overflowSet, executionContext);
   }
 }

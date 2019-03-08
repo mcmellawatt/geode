@@ -29,6 +29,7 @@ import org.apache.geode.cache.Region;
 import org.apache.geode.cache.query.AmbiguousNameException;
 import org.apache.geode.cache.query.FunctionDomainException;
 import org.apache.geode.cache.query.NameResolutionException;
+import org.apache.geode.cache.query.QueryExecutionLowMemoryException;
 import org.apache.geode.cache.query.QueryExecutionTimeoutException;
 import org.apache.geode.cache.query.QueryInvocationTargetException;
 import org.apache.geode.cache.query.QueryService;
@@ -126,15 +127,7 @@ public class CompiledIteratorDef extends AbstractCompiledValue {
       throws RegionNotFoundException, TypeMismatchException {
     try {
       rIter.evaluateCollection(context);
-    } catch (QueryExecutionTimeoutException qet) {
-      throw qet;
-    } catch (RegionNotFoundException re) {
-      throw re;
-    } catch (NotAuthorizedException e) {
-      throw e;
-    } catch (QueryExecutionCanceledException e) {
-      throw e;
-    } catch (CacheClosedException e) {
+    } catch (QueryExecutionTimeoutException | QueryExecutionLowMemoryException | RegionNotFoundException | NotAuthorizedException | CacheClosedException e) {
       throw e;
     } catch (Exception e) {
       if (logger.isDebugEnabled()) {
