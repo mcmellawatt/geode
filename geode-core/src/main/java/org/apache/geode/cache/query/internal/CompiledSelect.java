@@ -833,7 +833,7 @@ public class CompiledSelect extends AbstractCompiledValue {
       // Iterate through the data set.
       for (Object aSr : sr) {
         // Check if query execution on this thread is canceled.
-        QueryMonitor.throwExceptionIfQueryCanceled();
+        context.getCache().getQueryMonitor().throwExceptionIfQueryCanceled();
 
         Object currObj = aSr;
         rIter.setCurrent(currObj);
@@ -879,7 +879,7 @@ public class CompiledSelect extends AbstractCompiledValue {
         while (((this.orderByAttrs != null && !ignoreOrderBy) || limitValue < 0
             || (numElementsAdded < limitValue)) && resultsIter.hasNext()) {
           // Check if query execution on this thread is canceled
-          QueryMonitor.throwExceptionIfQueryCanceled();
+          context.getCache().getQueryMonitor().throwExceptionIfQueryCanceled();
 
           Object values[] = ((Struct) resultsIter.next()).getFieldValues();
           for (int i = 0; i < values.length; i++) {

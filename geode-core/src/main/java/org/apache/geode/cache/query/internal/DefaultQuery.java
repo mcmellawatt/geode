@@ -268,7 +268,7 @@ public class DefaultQuery implements Query {
         // Add current thread to be monitored by QueryMonitor.
         // In case of partitioned region it will be added before the query execution
         // starts on the Local Buckets.
-        queryMonitor.monitorQuery(this);
+        queryMonitor.startMonitoringQuery(this);
       }
 
       context.setCqQueryContext(this.isCqQuery);
@@ -403,7 +403,7 @@ public class DefaultQuery implements Query {
     // QueryMonitor Service.
     if (queryMonitor != null && PRQueryProcessor.NUM_THREADS > 1) {
       // Add current thread to be monitored by QueryMonitor.
-      queryMonitor.monitorQuery(this);
+      queryMonitor.startMonitoringQuery(this);
     }
 
     Object result = null;

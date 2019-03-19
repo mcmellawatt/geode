@@ -34,8 +34,6 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
 
-import org.apache.geode.internal.cache.InternalCache;
-
 @State(Scope.Thread)
 @Fork(1)
 public class MonitorQueryUnderContentionBenchmark {
@@ -54,7 +52,7 @@ public class MonitorQueryUnderContentionBenchmark {
   private static final int START_DELAY_RANGE_MILLIS = 100;
 
   /*
-   * Delay, from time startOneSimulatedQuery() is called, until monitorQuery() is called.
+   * Delay, from time startOneSimulatedQuery() is called, until startMonitoringQuery() is called.
    */
   private static final int QUERY_INITIAL_DELAY = 0;
 
@@ -135,7 +133,7 @@ public class MonitorQueryUnderContentionBenchmark {
   @OutputTimeUnit(TimeUnit.MILLISECONDS)
   // @Warmup we don't warm up because our @Setup warms us up
   public void monitorQuery() {
-    queryMonitor.monitorQuery(query);
+    queryMonitor.startMonitoringQuery(query);
     queryMonitor.stopMonitoringQuery(query);
   }
 
@@ -159,7 +157,7 @@ public class MonitorQueryUnderContentionBenchmark {
       int startDelayRangeMillis, int completeDelayRangeMillis) {
     executorService.schedule(() -> {
       final DefaultQuery query = createDefaultQuery();
-      queryMonitor.monitorQuery(query);
+      queryMonitor.startMonitoringQuery(query);
       executorService.schedule(() -> {
         queryMonitor.stopMonitoringQuery(query);
       },

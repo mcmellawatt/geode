@@ -52,7 +52,6 @@ import org.apache.geode.cache.query.internal.DefaultQuery;
 import org.apache.geode.cache.query.internal.ExecutionContext;
 import org.apache.geode.cache.query.internal.IndexInfo;
 import org.apache.geode.cache.query.internal.QRegion;
-import org.apache.geode.cache.query.internal.QueryMonitor;
 import org.apache.geode.cache.query.internal.QueryUtils;
 import org.apache.geode.cache.query.internal.RuntimeIterator;
 import org.apache.geode.cache.query.internal.StructFields;
@@ -1161,12 +1160,6 @@ public abstract class AbstractIndex implements IndexProtocol {
     private void applyProjectionForIndexInit(List currrentRuntimeIters)
         throws FunctionDomainException, TypeMismatchException, NameResolutionException,
         QueryInvocationTargetException, IMQException {
-
-      if (QueryMonitor.isLowMemory()) {
-        throw new IMQException(
-            "Index creation canceled due to low memory");
-      }
-
       LocalRegion.NonTXEntry temp;
 
       // Evaluate NonTXEntry for index on entries or additional projections
@@ -1736,8 +1729,6 @@ public abstract class AbstractIndex implements IndexProtocol {
 
     void addValuesToCollection(Collection result, int limit, ExecutionContext context) {
       for (final Object o : this.map.entrySet()) {
-        // Check if query execution on this thread is canceled.
-        QueryMonitor.throwExceptionIfQueryCanceled();
         if (this.verifyLimit(result, limit, context)) {
           return;
         }
@@ -1800,8 +1791,6 @@ public abstract class AbstractIndex implements IndexProtocol {
       }
 
       for (Object o : this.map.entrySet()) {
-        // Check if query execution on this thread is canceled.
-        QueryMonitor.throwExceptionIfQueryCanceled();
         Entry e = (Entry) o;
         Object value = e.getValue();
         // Key is a RegionEntry here.

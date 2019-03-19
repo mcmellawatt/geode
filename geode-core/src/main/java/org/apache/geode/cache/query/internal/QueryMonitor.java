@@ -16,21 +16,21 @@ package org.apache.geode.cache.query.internal;
 
 public class QueryMonitor {
   public QueryMonitor(final long maxQueryExecutionTime) {
-    //TODO: Timeout a query if maxQueryExecutionTime is exceeded
+    // TODO: Timeout a query if maxQueryExecutionTime is exceeded
   }
 
   /**
    * Start monitoring the query.
    */
-  public void monitorQuery(final DefaultQuery query) {
-    //TODO: Implement monitor query
+  public void startMonitoringQuery(final ExecutionContext executionContext) {
+    // TODO: Implement monitor query
   }
 
   /**
    * Stop monitoring the query.
    */
-  public void stopMonitoringQuery(final DefaultQuery query) {
-    //TODO: Implement stop monitoring query
+  public void stopMonitoringQuery(final ExecutionContext executionContext) {
+    // TODO: Implement stop monitoring query
   }
 
   /**
@@ -39,14 +39,14 @@ public class QueryMonitor {
    *
    * @throws QueryExecutionCanceledException if the query has been canceled
    */
-  public static void throwExceptionIfQueryCanceled() {
-    //TODO: Throw a QueryExecutionCanceledException if the query has been canceled
+  public void throwExceptionIfQueryCanceled() {
+    // TODO: Throw a QueryExecutionCanceledException if the query has been canceled
   }
 
   /**
    * Stops query monitoring. Makes this {@link QueryMonitor} unusable for further monitoring.
    */
   public void stopMonitoring() {
-    //TODO: Implement stop monitoring query
+    // TODO: Implement stop monitoring query
   }
 }

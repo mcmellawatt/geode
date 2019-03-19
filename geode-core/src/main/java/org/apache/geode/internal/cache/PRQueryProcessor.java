@@ -241,7 +241,7 @@ public class PRQueryProcessor {
     try {
       if (queryMonitor != null) {
         // Add current thread to be monitored by QueryMonitor.
-        queryMonitor.monitorQuery(query);
+        queryMonitor.startMonitoringQuery(query);
       }
 
       Object results = query.executeUsingContext(context);

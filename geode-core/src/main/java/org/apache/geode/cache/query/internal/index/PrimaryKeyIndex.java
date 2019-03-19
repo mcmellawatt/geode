@@ -33,7 +33,6 @@ import org.apache.geode.cache.query.TypeMismatchException;
 import org.apache.geode.cache.query.internal.CompiledValue;
 import org.apache.geode.cache.query.internal.CqEntry;
 import org.apache.geode.cache.query.internal.ExecutionContext;
-import org.apache.geode.cache.query.internal.QueryMonitor;
 import org.apache.geode.cache.query.internal.QueryObserver;
 import org.apache.geode.cache.query.internal.QueryObserverHolder;
 import org.apache.geode.cache.query.internal.QueryUtils;
@@ -134,8 +133,6 @@ public class PrimaryKeyIndex extends AbstractIndex {
         // results.addAll(values);
         Iterator iter = values.iterator();
         while (iter.hasNext()) {
-          // Check if query execution on this thread is canceled.
-          QueryMonitor.throwExceptionIfQueryCanceled();
           addResultToResults(context, results, key, iter.next());
           if (limit != -1 && results.size() == limit) {
             observer.limitAppliedAtIndexLevel(this, limit, results);

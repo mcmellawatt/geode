@@ -53,7 +53,6 @@ import org.apache.geode.cache.query.internal.DefaultQuery;
 import org.apache.geode.cache.query.internal.ExecutionContext;
 import org.apache.geode.cache.query.internal.IndexInfo;
 import org.apache.geode.cache.query.internal.QRegion;
-import org.apache.geode.cache.query.internal.QueryMonitor;
 import org.apache.geode.cache.query.internal.QueryObserver;
 import org.apache.geode.cache.query.internal.QueryObserverHolder;
 import org.apache.geode.cache.query.internal.QueryUtils;
@@ -609,8 +608,6 @@ public class HashIndex extends AbstractIndex {
     }
     int i = 0;
     while (entriesIter.hasNext()) {
-      // Check if query execution on this thread is canceled.
-      QueryMonitor.throwExceptionIfQueryCanceled();
       if (IndexManager.testHook != null) {
         if (logger.isDebugEnabled()) {
           logger.debug("IndexManager TestHook is set in addToResultsFromEntries.");
@@ -1197,11 +1194,6 @@ public class HashIndex extends AbstractIndex {
     private void applyProjectionForIndexInit(List currentRuntimeIters)
         throws FunctionDomainException, TypeMismatchException, NameResolutionException,
         QueryInvocationTargetException, IMQException {
-      if (QueryMonitor.isLowMemory()) {
-        throw new IMQException(
-            "Index creation canceled due to low memory");
-      }
-
       Object indexKey = null;
       RegionEntry re = null;
       indexKey = this.isFirstItrOnEntry ? this.indexedExpr.evaluate(this.initContext)
