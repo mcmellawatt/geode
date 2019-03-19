@@ -37,7 +37,6 @@ import org.apache.geode.annotations.Immutable;
 import org.apache.geode.cache.CacheClosedException;
 import org.apache.geode.cache.query.internal.DefaultQuery;
 import org.apache.geode.cache.query.internal.PRQueryTraceInfo;
-import org.apache.geode.cache.query.internal.QueryMonitor;
 import org.apache.geode.cache.query.internal.StructImpl;
 import org.apache.geode.cache.query.internal.types.StructTypeImpl;
 import org.apache.geode.cache.query.types.ObjectType;
@@ -549,10 +548,7 @@ public abstract class StreamingOperation {
                   DefaultQuery.TestHook.SPOTS.BEFORE_ADD_OR_UPDATE_MAPPING_OR_DESERIALIZING_NTH_STREAMINGOPERATION,
                   null);
             }
-            if (isQueryMessageProcessor && QueryMonitor.isLowMemory()) {
-              lowMemoryDetected = true;
-              break;
-            }
+
             Object o = DataSerializer.readObject(in);
             if (isQueryMessageProcessor && elementType != null && elementType.isStructType()) {
               boolean convertToStruct = isSenderAbove_8_1;

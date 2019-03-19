@@ -57,7 +57,6 @@ import org.apache.geode.cache.query.internal.CompiledValue;
 import org.apache.geode.cache.query.internal.ExecutionContext;
 import org.apache.geode.cache.query.internal.MapIndexable;
 import org.apache.geode.cache.query.internal.NullToken;
-import org.apache.geode.cache.query.internal.QueryMonitor;
 import org.apache.geode.cache.query.internal.QueryObserver;
 import org.apache.geode.cache.query.internal.QueryObserverHolder;
 import org.apache.geode.cache.query.internal.index.AbstractIndex.InternalIndexStatistics;
@@ -262,11 +261,6 @@ public class IndexManager {
       String origFromClause, String imports, ExecutionContext externalContext,
       PartitionedIndex prIndex, boolean loadEntries)
       throws IndexNameConflictException, IndexExistsException, IndexInvalidException {
-
-    if (QueryMonitor.isLowMemory()) {
-      throw new IndexInvalidException(
-          "Index creation canceled due to low memory");
-    }
 
     boolean oldReadSerialized = this.cache.getPdxReadSerializedOverride();
     this.cache.setPdxReadSerializedOverride(true);

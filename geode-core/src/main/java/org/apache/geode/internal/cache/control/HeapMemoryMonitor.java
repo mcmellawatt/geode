@@ -604,14 +604,16 @@ public class HeapMemoryMonitor implements NotificationListener, MemoryMonitor {
       this.cache.getLogger().error(
           createCriticalThresholdLogMessage(event, eventOrigin, true));
       if (!this.cache.isQueryMonitorDisabledForLowMemory()) {
-        this.cache.getQueryMonitor().setLowMemory(true, event.getBytesUsed());
+        // TODO: Add low memory monitoring abilities to query monitor
+        // this.cache.getQueryMonitor().setLowMemory(true, event.getBytesUsed());
       }
 
     } else if (!event.getState().isCritical() && event.getPreviousState().isCritical()) {
       this.cache.getLogger().error(
           createCriticalThresholdLogMessage(event, eventOrigin, false));
       if (!this.cache.isQueryMonitorDisabledForLowMemory()) {
-        this.cache.getQueryMonitor().setLowMemory(false, event.getBytesUsed());
+        // TODO: Add low memory monitoring abilities to query monitor
+        // this.cache.getQueryMonitor().setLowMemory(false, event.getBytesUsed());
       }
     }
 

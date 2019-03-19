@@ -39,7 +39,7 @@ public class QueryMonitor {
    *
    * @throws QueryExecutionCanceledException if the query has been canceled
    */
-  public void throwExceptionIfQueryCanceled() {
+  public void throwExceptionIfQueryCanceled(final ExecutionContext executionContext) {
     // TODO: Throw a QueryExecutionCanceledException if the query has been canceled
   }
 

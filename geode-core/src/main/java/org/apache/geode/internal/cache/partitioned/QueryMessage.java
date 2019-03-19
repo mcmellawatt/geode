@@ -29,12 +29,10 @@ import org.apache.logging.log4j.Logger;
 import org.apache.geode.DataSerializer;
 import org.apache.geode.cache.CacheException;
 import org.apache.geode.cache.query.QueryException;
-import org.apache.geode.cache.query.QueryExecutionLowMemoryException;
 import org.apache.geode.cache.query.Struct;
 import org.apache.geode.cache.query.internal.DefaultQuery;
 import org.apache.geode.cache.query.internal.IndexTrackingQueryObserver;
 import org.apache.geode.cache.query.internal.PRQueryTraceInfo;
-import org.apache.geode.cache.query.internal.QueryMonitor;
 import org.apache.geode.cache.query.internal.QueryObserver;
 import org.apache.geode.cache.query.internal.types.ObjectTypeImpl;
 import org.apache.geode.cache.query.types.ObjectType;
@@ -94,12 +92,6 @@ public class QueryMessage extends StreamingPartitionOperation.StreamingPartition
       throws CacheException, ForceReattemptException, InterruptedException {
     final boolean isDebugEnabled = logger.isDebugEnabled();
 
-    if (QueryMonitor.isLowMemory()) {
-      String reason = String.format(
-          "Query execution canceled due to memory threshold crossed in system, memory used: %s bytes.",
-          QueryMonitor.getMemoryUsedBytes());
-      throw new QueryExecutionLowMemoryException(reason);
-    }
     if (Thread.interrupted()) {
       throw new InterruptedException();
     }
@@ -158,15 +150,6 @@ public class QueryMessage extends StreamingPartitionOperation.StreamingPartition
     }
 
     pr.waitOnInitialization();
-
-    if (QueryMonitor.isLowMemory()) {
-      String reason = String.format(
-          "Query execution canceled due to memory threshold crossed in system, memory used: %s bytes.",
-          QueryMonitor.getMemoryUsedBytes());
-      // throw query exception to piggyback on existing error handling as qp.executeQuery also
-      // throws the same error for low memory
-      throw new QueryExecutionLowMemoryException(reason);
-    }
 
     DefaultQuery query = new DefaultQuery(this.queryString, pr.getCache(), false);
     // Remote query, use the PDX types in serialized form.
@@ -241,15 +224,6 @@ public class QueryMessage extends StreamingPartitionOperation.StreamingPartition
           }
           queryTraceInfo.setIndexesUsed(sb.toString());
         }
-      }
-
-      if (QueryMonitor.isLowMemory()) {
-        String reason = String.format(
-            "Query execution canceled due to memory threshold crossed in system, memory used: %s bytes.",
-            QueryMonitor.getMemoryUsedBytes());
-        throw new QueryExecutionLowMemoryException(reason);
-      } else if (query.isCanceled()) {
-        throw query.getQueryCanceledException();
       }
       super.operateOnPartitionedRegion(dm, pr, startTime);
     } finally {

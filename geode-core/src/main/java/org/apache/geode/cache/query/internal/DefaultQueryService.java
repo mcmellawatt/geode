@@ -51,7 +51,6 @@ import org.apache.geode.cache.query.IndexType;
 import org.apache.geode.cache.query.MultiIndexCreationException;
 import org.apache.geode.cache.query.NameResolutionException;
 import org.apache.geode.cache.query.Query;
-import org.apache.geode.cache.query.QueryExecutionLowMemoryException;
 import org.apache.geode.cache.query.QueryInvalidException;
 import org.apache.geode.cache.query.QueryService;
 import org.apache.geode.cache.query.RegionNotFoundException;
@@ -140,12 +139,6 @@ public class DefaultQueryService implements InternalQueryService {
    */
   @Override
   public Query newQuery(String queryString) {
-    if (QueryMonitor.isLowMemory()) {
-      String reason = String.format(
-          "Query execution canceled due to memory threshold crossed in system, memory used: %s bytes.",
-          QueryMonitor.getMemoryUsedBytes());
-      throw new QueryExecutionLowMemoryException(reason);
-    }
     if (queryString == null)
       throw new QueryInvalidException(
           "The query string must not be null");

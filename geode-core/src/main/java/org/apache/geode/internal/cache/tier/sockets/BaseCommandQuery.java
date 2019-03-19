@@ -23,7 +23,6 @@ import java.util.Set;
 import org.apache.geode.cache.RegionDestroyedException;
 import org.apache.geode.cache.operations.QueryOperationContext;
 import org.apache.geode.cache.query.Query;
-import org.apache.geode.cache.query.QueryException;
 import org.apache.geode.cache.query.QueryInvalidException;
 import org.apache.geode.cache.query.SelectResults;
 import org.apache.geode.cache.query.Struct;
@@ -263,10 +262,7 @@ public abstract class BaseCommandQuery extends BaseCommand {
       // Otherwise, write a query response and continue
       // Check if query got canceled from QueryMonitor.
       DefaultQuery defaultQuery = (DefaultQuery) query;
-      if ((defaultQuery).isCanceled()) {
-        e = new QueryException(defaultQuery.getQueryCanceledException().getMessage(),
-            e.getCause());
-      }
+
       writeQueryResponseException(msg, e, servConn);
       return false;
     } finally {

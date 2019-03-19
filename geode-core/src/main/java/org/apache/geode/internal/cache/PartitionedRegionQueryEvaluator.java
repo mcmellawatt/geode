@@ -37,7 +37,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.geode.CopyHelper;
 import org.apache.geode.SystemFailure;
 import org.apache.geode.cache.query.QueryException;
-import org.apache.geode.cache.query.QueryExecutionLowMemoryException;
 import org.apache.geode.cache.query.QueryInvocationTargetException;
 import org.apache.geode.cache.query.SelectResults;
 import org.apache.geode.cache.query.Struct;
@@ -54,7 +53,6 @@ import org.apache.geode.cache.query.internal.NWayMergeResults;
 import org.apache.geode.cache.query.internal.OrderByComparator;
 import org.apache.geode.cache.query.internal.PRQueryTraceInfo;
 import org.apache.geode.cache.query.internal.QueryExecutionContext;
-import org.apache.geode.cache.query.internal.QueryMonitor;
 import org.apache.geode.cache.query.internal.ResultsSet;
 import org.apache.geode.cache.query.internal.SortedResultsBag;
 import org.apache.geode.cache.query.internal.SortedStructBag;
@@ -228,24 +226,7 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
     }
 
     synchronized (results) {
-      if (!QueryMonitor.isLowMemory() && !this.query.isCanceled()) {
-        results.add(objects);
-      } else {
-        if (logger.isDebugEnabled()) {
-          logger.debug("query canceled while gathering results, aborting");
-        }
-        if (QueryMonitor.isLowMemory()) {
-          String reason =
-              "Query execution canceled due to low memory while gathering results from partitioned regions";
-          query.setQueryCanceledException(new QueryExecutionLowMemoryException(reason));
-        } else {
-          if (logger.isDebugEnabled()) {
-            logger.debug("query cancelled while gathering results, aborting due to exception "
-                + query.getQueryCanceledException());
-          }
-        }
-        return false;
-      }
+      results.add(objects);
 
       if (lastInSequence) {
         ((MemberResultsList) results).setLastChunkReceived(true);
@@ -419,10 +400,6 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
           throw e;
         }
       }
-    }
-
-    if (query.isCanceled()) {
-      throw query.getQueryCanceledException();
     }
 
     if (localFault != null) {
@@ -663,7 +640,6 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
 
     for (Map.Entry<InternalDistributedMember, Collection<Collection>> e : this.resultsPerMember
         .entrySet()) {
-      checkIfQueryShouldBeCancelled();
       // If its a local query, the results should contain domain objects.
       // in case of client/server query the objects from PdxInstances were
       // retrieved on the client side.
@@ -696,7 +672,6 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
         }
       } else {
         for (Collection res : e.getValue()) {
-          checkIfQueryShouldBeCancelled();
           // final TaintableArrayList res = (TaintableArrayList) e.getValue();
           if (res != null) {
             if (isDebugEnabled) {
@@ -709,7 +684,6 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
             boolean[] objectChangedMarker = new boolean[1];
 
             for (Object obj : res) {
-              checkIfQueryShouldBeCancelled();
               int occurrence = 0;
               obj = PDXUtils.convertPDX(obj, isStruct, getDomainObjectForPdx, getDeserializedObject,
                   localResults, objectChangedMarker, true);
@@ -754,23 +728,6 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
     }
     return this.cumulativeResults;
   }
-
-  private void checkIfQueryShouldBeCancelled() {
-    if (QueryMonitor.isLowMemory()) {
-      String reason =
-          "Query execution canceled due to low memory while gathering results from partitioned regions";
-      query.setQueryCanceledException(new QueryExecutionLowMemoryException(reason));
-      if (DefaultQuery.testHook != null) {
-        DefaultQuery.testHook
-            .doTestHook(DefaultQuery.TestHook.SPOTS.BEFORE_THROW_QUERY_CANCELED_EXCEPTION, null);
-      }
-      throw query.getQueryCanceledException();
-    } else if (query.isCanceled()) {
-      throw query.getQueryCanceledException();
-    }
-  }
-
-
 
   /**
    * Adds all counts from all member buckets to cumulative results.
@@ -1100,9 +1057,6 @@ public class PartitionedRegionQueryEvaluator extends StreamingPartitionOperation
         List objects = m.getObjects();
 
         if (m.isCanceled()) {
-          String reason =
-              "Query execution canceled due to low memory while gathering results from partitioned regions";
-          query.setQueryCanceledException(new QueryExecutionLowMemoryException(reason));
           this.abort = true;
         }
 
