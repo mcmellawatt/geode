@@ -73,14 +73,14 @@ public class QueryMonitorIntegrationTest {
           cache,
           NEVER_EXPIRE_MILLIS);
 
-      queryMonitor.monitorQueryThread(query);
+      queryMonitor.monitorQuery(query);
 
       queryMonitor.setLowMemory(true, 1);
 
       verify(query, times(1))
           .setQueryCanceledException(any(QueryExecutionLowMemoryException.class));
 
-      assertThatThrownBy(QueryMonitor::throwExceptionIfQueryOnCurrentThreadIsCanceled,
+      assertThatThrownBy(QueryMonitor::throwExceptionIfQueryCanceled,
           "Expected setLowMemory(true,_) to cancel query immediately, but it didn't.",
           QueryExecutionCanceledException.class);
     } finally {
@@ -133,11 +133,11 @@ public class QueryMonitorIntegrationTest {
       final DefaultQuery query) {
 
     final Thread queryThread = new Thread(() -> {
-      queryMonitor.monitorQueryThread(query);
+      queryMonitor.monitorQuery(query);
 
       while (true) {
         try {
-          QueryMonitor.throwExceptionIfQueryOnCurrentThreadIsCanceled();
+          QueryMonitor.throwExceptionIfQueryCanceled();
           Thread.sleep(5 * EXPIRE_QUICK_MILLIS);
         } catch (final QueryExecutionCanceledException e) {
           queryExecutionCanceledException = e;

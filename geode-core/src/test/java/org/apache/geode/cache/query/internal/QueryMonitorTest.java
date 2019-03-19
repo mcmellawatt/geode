@@ -75,7 +75,7 @@ public class QueryMonitorTest {
   public void monitorQueryThreadCqQueryIsNotMonitored() {
     DefaultQuery query = mock(DefaultQuery.class);
     when(query.isCqQuery()).thenReturn(true);
-    monitor.monitorQueryThread(query);
+    monitor.monitorQuery(query);
 
     // Verify that the expiration task was not scheduled for the CQ query
     Mockito.verify(scheduledThreadPoolExecutor, never()).schedule(captor.capture(), anyLong(),
@@ -87,7 +87,7 @@ public class QueryMonitorTest {
     DefaultQuery query = mock(DefaultQuery.class);
     monitor.setLowMemory(true, 100);
 
-    assertThatThrownBy(() -> monitor.monitorQueryThread(query))
+    assertThatThrownBy(() -> monitor.monitorQuery(query))
         .isExactlyInstanceOf(QueryExecutionLowMemoryException.class);
   }
 
@@ -95,14 +95,14 @@ public class QueryMonitorTest {
   public void monitorQueryThreadExpirationTaskScheduled() {
     DefaultQuery query = mock(DefaultQuery.class);
 
-    monitor.monitorQueryThread(query);
+    monitor.monitorQuery(query);
     Mockito.verify(scheduledThreadPoolExecutor, times(1)).schedule(captor.capture(), anyLong(),
         isA(TimeUnit.class));
     captor.getValue().run();
 
     Mockito.verify(query, times(1))
         .setQueryCanceledException(isA(QueryExecutionTimeoutException.class));
-    assertThatThrownBy(QueryMonitor::throwExceptionIfQueryOnCurrentThreadIsCanceled)
+    assertThatThrownBy(QueryMonitor::throwExceptionIfQueryCanceled)
         .isExactlyInstanceOf(QueryExecutionCanceledException.class);
   }
 

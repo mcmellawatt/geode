@@ -54,7 +54,7 @@ public class MonitorQueryUnderContentionBenchmark {
   private static final int START_DELAY_RANGE_MILLIS = 100;
 
   /*
-   * Delay, from time startOneSimulatedQuery() is called, until monitorQueryThread() is called.
+   * Delay, from time startOneSimulatedQuery() is called, until monitorQuery() is called.
    */
   private static final int QUERY_INITIAL_DELAY = 0;
 
@@ -91,8 +91,7 @@ public class MonitorQueryUnderContentionBenchmark {
   @Setup(Level.Trial)
   public void trialSetup() throws InterruptedException {
     queryMonitor =
-        new QueryMonitor((ScheduledThreadPoolExecutor) Executors.newScheduledThreadPool(1),
-            mock(InternalCache.class), QUERY_MAX_EXECUTION_TIME);
+        new QueryMonitor(QUERY_MAX_EXECUTION_TIME);
 
     final int numberOfThreads =
         THREAD_POOL_PROCESSOR_MULTIPLE * Runtime.getRuntime().availableProcessors();
@@ -136,8 +135,8 @@ public class MonitorQueryUnderContentionBenchmark {
   @OutputTimeUnit(TimeUnit.MILLISECONDS)
   // @Warmup we don't warm up because our @Setup warms us up
   public void monitorQuery() {
-    queryMonitor.monitorQueryThread(query);
-    queryMonitor.stopMonitoringQueryThread(query);
+    queryMonitor.monitorQuery(query);
+    queryMonitor.stopMonitoringQuery(query);
   }
 
   private void generateLoad(final ScheduledExecutorService executorService,
@@ -160,9 +159,9 @@ public class MonitorQueryUnderContentionBenchmark {
       int startDelayRangeMillis, int completeDelayRangeMillis) {
     executorService.schedule(() -> {
       final DefaultQuery query = createDefaultQuery();
-      queryMonitor.monitorQueryThread(query);
+      queryMonitor.monitorQuery(query);
       executorService.schedule(() -> {
-        queryMonitor.stopMonitoringQueryThread(query);
+        queryMonitor.stopMonitoringQuery(query);
       },
           gaussianLong(completeDelayRangeMillis),
           TimeUnit.MILLISECONDS);

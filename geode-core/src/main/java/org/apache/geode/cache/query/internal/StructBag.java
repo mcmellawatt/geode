@@ -340,7 +340,7 @@ public class StructBag extends ResultsBag implements StructFields {
 
     for (Iterator itr = sb.fieldValuesIterator(); itr.hasNext();) {
       // Check if query execution on this thread is canceled.
-      QueryMonitor.throwExceptionIfQueryOnCurrentThreadIsCanceled();
+      QueryMonitor.throwExceptionIfQueryCanceled();
 
       Object[] vals = (Object[]) itr.next();
       if (super.add(vals)) {

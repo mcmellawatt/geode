@@ -761,7 +761,7 @@ public class CompactRangeIndex extends AbstractIndex {
     while (entriesIter.hasNext()) {
       try {
         // Check if query execution on this thread is canceled.
-        QueryMonitor.throwExceptionIfQueryOnCurrentThreadIsCanceled();
+        QueryMonitor.throwExceptionIfQueryCanceled();
         if (IndexManager.testHook != null) {
           if (this.region.getCache().getLogger().fineEnabled()) {
             this.region.getCache().getLogger()

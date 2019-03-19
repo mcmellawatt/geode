@@ -84,7 +84,7 @@ public class DefaultQuery implements Query {
 
   private Optional<ScheduledFuture> cancelationTask;
 
-  private boolean traceOn = false;
+  private boolean traceOn;
 
   @Immutable
   private static final Object[] EMPTY_ARRAY = new Object[0];
@@ -103,12 +103,6 @@ public class DefaultQuery implements Query {
 
   @MutableForTesting
   public static int TEST_COMPILED_QUERY_CLEAR_TIME = -1;
-
-  /**
-   * Use to represent null result. Used while adding PR results to the results-queue, which is a
-   * blocking queue.
-   */
-  public static final Object NULL_RESULT = new Object();
 
   private volatile CacheRuntimeException queryCancelledException;
 
@@ -157,10 +151,6 @@ public class DefaultQuery implements Query {
 
   static final ThreadLocal<AtomicBoolean> queryCanceled =
       ThreadLocal.withInitial(AtomicBoolean::new);
-
-  public static void setPdxClasstoMethodsmap(Map<String, Set<String>> map) {
-    pdxClassToMethodsMap.set(map);
-  }
 
   public static Map<String, Set<String>> getPdxClasstoMethodsmap() {
     return pdxClassToMethodsMap.get();
@@ -278,7 +268,7 @@ public class DefaultQuery implements Query {
         // Add current thread to be monitored by QueryMonitor.
         // In case of partitioned region it will be added before the query execution
         // starts on the Local Buckets.
-        queryMonitor.monitorQueryThread(this);
+        queryMonitor.monitorQuery(this);
       }
 
       context.setCqQueryContext(this.isCqQuery);
@@ -321,7 +311,7 @@ public class DefaultQuery implements Query {
     } finally {
       this.cache.setPdxReadSerializedOverride(initialPdxReadSerialized);
       if (queryMonitor != null) {
-        queryMonitor.stopMonitoringQueryThread(this);
+        queryMonitor.stopMonitoringQuery(this);
       }
       this.endTrace(indexObserver, startTime, result);
     }
@@ -413,7 +403,7 @@ public class DefaultQuery implements Query {
     // QueryMonitor Service.
     if (queryMonitor != null && PRQueryProcessor.NUM_THREADS > 1) {
       // Add current thread to be monitored by QueryMonitor.
-      queryMonitor.monitorQueryThread(this);
+      queryMonitor.monitorQuery(this);
     }
 
     Object result = null;
@@ -421,7 +411,7 @@ public class DefaultQuery implements Query {
       result = executeUsingContext(context);
     } finally {
       if (queryMonitor != null && PRQueryProcessor.NUM_THREADS > 1) {
-        queryMonitor.stopMonitoringQueryThread(this);
+        queryMonitor.stopMonitoringQuery(this);
       }
 
       int resultSize = 0;
