@@ -20,9 +20,6 @@ import static org.apache.geode.internal.lang.SystemPropertyHelper.getProductInte
 
 import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.IOException;
-import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
