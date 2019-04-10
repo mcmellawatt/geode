@@ -14,23 +14,37 @@
  */
 package org.apache.geode.cache.query.internal;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
+import org.apache.geode.internal.concurrent.ConcurrentHashSet;
+
 public class QueryMonitor {
+  private long maxQueryExecutionTime;
+  private Set<IExecutionContext> monitoredExecutionContexts;
+  private Boolean isCanceled;
+
   public QueryMonitor(final long maxQueryExecutionTime) {
-    // TODO: Timeout a query if maxQueryExecutionTime is exceeded
+    this.maxQueryExecutionTime = maxQueryExecutionTime;
+    this.monitoredExecutionContexts = new ConcurrentHashSet<>();
+    isCanceled = false;
   }
 
   /**
    * Start monitoring the query.
    */
-  public void startMonitoringQuery(final ExecutionContext executionContext) {
-    // TODO: Implement monitor query
+  public void startMonitoringQuery(final IExecutionContext executionContext) {
+    monitoredExecutionContexts.add(executionContext);
+    executionContext.setStartTime(System.currentTimeMillis());
   }
 
   /**
    * Stop monitoring the query.
    */
-  public void stopMonitoringQuery(final ExecutionContext executionContext) {
-    // TODO: Implement stop monitoring query
+  public void stopMonitoringQuery(final IExecutionContext executionContext) {
+    monitoredExecutionContexts.remove(executionContext);
+    executionContext.setStartTime(-1);
   }
 
   /**
@@ -39,14 +53,29 @@ public class QueryMonitor {
    *
    * @throws QueryExecutionCanceledException if the query has been canceled
    */
-  public void throwExceptionIfQueryCanceled(final ExecutionContext executionContext) {
-    // TODO: Throw a QueryExecutionCanceledException if the query has been canceled
+  public void throwExceptionIfQueryCanceled(final IExecutionContext executionContext) {
+    if (executionContext.getStartTime() < 0) {
+      return;
+    }
+
+    if (isCanceled || (System.currentTimeMillis() - executionContext.getStartTime()) >= this.maxQueryExecutionTime) {
+      throw new RuntimeException();
+    }
   }
 
   /**
    * Stops query monitoring. Makes this {@link QueryMonitor} unusable for further monitoring.
    */
   public void stopMonitoring() {
-    // TODO: Implement stop monitoring query
+    for (IExecutionContext executionContext : monitoredExecutionContexts) {
+      stopMonitoringQuery(executionContext);
+    }
+  }
+
+  /**
+   * Cancel all queries that the monitor knows so that they terminate on next throwExceptionIfQueryCanceled
+   */
+  public void cancelAllQueries() {
+    isCanceled = true;
   }
 }

@@ -47,7 +47,7 @@ import org.apache.geode.pdx.internal.PdxString;
  *
  * @see QueryExecutionContext for extended version of this ONLY for querying.
  */
-public class ExecutionContext {
+public class ExecutionContext implements IExecutionContext {
 
   Object[] bindArguments;
 
@@ -93,6 +93,11 @@ public class ExecutionContext {
   private boolean isPRQueryNode = false;
 
   /**
+   * Start time of query for monitoring execution.
+   */
+  private long startTime;
+
+  /**
    * Param specialIteratorVar name of special variable to use to denote the current iteration
    * element. Used to implement the "this" var in the query shortcut methods
    *
@@ -105,6 +110,16 @@ public class ExecutionContext {
 
   public CachePerfStats getCachePerfStats() {
     return this.cache.getCachePerfStats();
+  }
+
+  @Override
+  public long getStartTime() {
+    return startTime;
+  }
+
+  @Override
+  public void setStartTime(final long startTime) {
+    this.startTime = startTime;
   }
 
   /**
