@@ -76,6 +76,7 @@ import javax.net.ssl.X509ExtendedKeyManager;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
+import sun.security.ssl.SSLSocketImpl;
 
 import org.apache.geode.GemFireConfigException;
 import org.apache.geode.SystemConnectException;
@@ -883,8 +884,33 @@ public class SocketCreator {
         if (optionalWatcher != null) {
           optionalWatcher.beforeConnect(socket);
         }
-        socket.connect(sockaddr, Math.max(timeout, 0));
-        configureClientSSLSocket(socket, timeout);
+        try {
+          socket.connect(sockaddr, Math.max(timeout, 0));
+          configureClientSSLSocket(socket, timeout);
+        } catch (SSLHandshakeException ex) {
+          socket.close();
+          socket = null;
+
+          sockaddr = new InetSocketAddress(inetadd.getHostName(), port);
+          socket = sf.createSocket();
+
+          // Optionally enable SO_KEEPALIVE in the OS network protocol.
+          socket.setKeepAlive(ENABLE_TCP_KEEP_ALIVE);
+
+          // If necessary, set the receive buffer size before connecting the
+          // socket so that large buffers will be allocated on accepted sockets
+          // (see java.net.Socket.setReceiverBufferSize javadocs for details)
+          if (socketBufferSize != -1) {
+            socket.setReceiveBufferSize(socketBufferSize);
+          }
+
+          if (optionalWatcher != null) {
+            optionalWatcher.beforeConnect(socket);
+          }
+
+          socket.connect(sockaddr, Math.max(timeout, 0));
+          configureClientSSLSocket(socket, timeout);
+        }
         return socket;
       } else {
         if (clientSide && this.clientSocketFactory != null) {

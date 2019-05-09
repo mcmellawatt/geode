@@ -19,6 +19,7 @@ import static org.apache.geode.distributed.ConfigurationProperties.CLUSTER_SSL_E
 import static org.apache.geode.distributed.ConfigurationProperties.CLUSTER_SSL_PROTOCOLS;
 import static org.apache.geode.distributed.ConfigurationProperties.CLUSTER_SSL_REQUIRE_AUTHENTICATION;
 import static org.apache.geode.distributed.ConfigurationProperties.MCAST_PORT;
+import static org.apache.geode.distributed.ConfigurationProperties.SSL_ENDPOINT_IDENTIFICATION_ENABLED;
 import static org.apache.geode.internal.security.SecurableCommunicationChannel.CLUSTER;
 import static org.apache.geode.test.awaitility.GeodeAwaitility.await;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -130,6 +131,7 @@ public class SSLSocketIntegrationTest {
     properties.setProperty(CLUSTER_SSL_REQUIRE_AUTHENTICATION, "true");
     properties.setProperty(CLUSTER_SSL_CIPHERS, "any");
     properties.setProperty(CLUSTER_SSL_PROTOCOLS, "TLSv1.2");
+    properties.setProperty(SSL_ENDPOINT_IDENTIFICATION_ENABLED, "true");
 
     this.distributionConfig = new DistributionConfigImpl(properties);
 
