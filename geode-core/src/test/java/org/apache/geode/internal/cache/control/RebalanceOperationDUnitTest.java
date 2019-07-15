@@ -71,11 +71,16 @@ import org.apache.geode.cache.util.CacheListenerAdapter;
 import org.apache.geode.distributed.DistributedMember;
 import org.apache.geode.distributed.DistributedSystem;
 import org.apache.geode.distributed.internal.DistributionConfig;
+import org.apache.geode.distributed.internal.DistributionManager;
+import org.apache.geode.distributed.internal.DistributionMessage;
+import org.apache.geode.distributed.internal.DistributionMessageObserver;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
+import org.apache.geode.distributed.internal.membership.gms.MembershipManagerHelper;
 import org.apache.geode.internal.cache.BucketRegion;
 import org.apache.geode.internal.cache.ColocationHelper;
 import org.apache.geode.internal.cache.DiskStoreImpl;
 import org.apache.geode.internal.cache.GemFireCacheImpl;
+import org.apache.geode.internal.cache.InitialImageOperation;
 import org.apache.geode.internal.cache.PRHARedundancyProvider;
 import org.apache.geode.internal.cache.PartitionedRegion;
 import org.apache.geode.internal.cache.PartitionedRegionDataStore;
@@ -1648,6 +1653,133 @@ public class RebalanceOperationDUnitTest extends JUnit4CacheTestCase {
     });
   }
 
+  /**
+   * Test that a member departure while moving buckets doesn't result in a bad state
+   */
+  @Test
+  public void testMemberDepartureDuringBucketMove() {
+    Host host = Host.getHost(0);
+    VM vm0 = host.getVM(0);
+    VM vm1 = host.getVM(1);
+    VM vm2 = host.getVM(2);
+
+    final SerializableRunnable createPrRegion = new SerializableRunnable("createRegion") {
+      public void run() {
+        Cache cache = getCache();
+        DiskStoreFactory dsf = cache.createDiskStoreFactory();
+        DiskStore ds1 = dsf.setDiskDirs(getDiskDirs()).create(getUniqueName());
+        AttributesFactory attr = new AttributesFactory();
+        PartitionAttributesFactory paf = new PartitionAttributesFactory();
+        paf.setRedundantCopies(0);
+        paf.setRecoveryDelay(-1);
+        paf.setStartupRecoveryDelay(-1);
+        PartitionAttributes prAttr = paf.create();
+        attr.setPartitionAttributes(prAttr);
+        attr.setDataPolicy(DataPolicy.PERSISTENT_PARTITION);
+        attr.setDiskSynchronous(true);
+        attr.setDiskStoreName(getUniqueName());
+        cache.createRegion("region1", attr.create());
+      }
+    };
+
+    // Create the region in only 1 VM
+    vm0.invoke(createPrRegion);
+
+    // Create some buckets
+    vm0.invoke(new SerializableRunnable("createSomeBuckets") {
+      public void run() {
+        Cache cache = getCache();
+        Region region = cache.getRegion("region1");
+        region.put(Integer.valueOf(1), "A");
+        region.put(Integer.valueOf(2), "A");
+        region.put(Integer.valueOf(3), "A");
+        region.put(Integer.valueOf(4), "A");
+        region.put(Integer.valueOf(5), "A");
+        region.put(Integer.valueOf(6), "A");
+      }
+    });
+
+
+    // Create the region in the other VM (should have no effect)
+    vm1.invoke(createPrRegion);
+
+    // Add an observer which will close the cache when the GII starts
+    vm0.invoke(new SerializableRunnable("Set crashing observer") {
+      public void run() {
+        DistributionMessageObserver.setInstance(new DistributionMessageObserver() {
+          @Override
+          public void beforeProcessMessage(DistributionManager dm, DistributionMessage message) {
+            if (message instanceof InitialImageOperation.RequestImageMessage) {
+              InitialImageOperation.RequestImageMessage
+                  rim = (InitialImageOperation.RequestImageMessage) message;
+              if (rim.regionPath.contains("/__PR/_B__region1_")) {
+                DistributionMessageObserver.setInstance(null);
+                MembershipManagerHelper.inhibitForcedDisconnectLogging(true);
+                MembershipManagerHelper.beSickMember(getCache().getDistributedSystem());
+                MembershipManagerHelper.playDead(getCache().getDistributedSystem());
+                try {
+                  Thread.sleep(15000);
+                } catch (InterruptedException e) {
+                  e.printStackTrace();
+                }
+              }
+            }
+          }
+
+        });
+      }
+    });
+
+    // Now do a rebalance, but start another member in the middle
+    vm0.invoke(new SerializableCallable("Do rebalance") {
+
+      public Object call() throws Exception {
+        GemFireCacheImpl cache = (GemFireCacheImpl) getCache();
+        InternalResourceManager manager = cache.getInternalResourceManager();
+        InternalResourceManager.setResourceObserver(new ResourceObserverAdapter() {
+          boolean firstBucket = true;
+
+          @Override
+          public void movingBucket(Region region, int bucketId, DistributedMember source,
+                                   DistributedMember target) {
+            if (firstBucket) {
+              firstBucket = false;
+              vm2.invoke(createPrRegion);
+            }
+          }
+        });
+        RebalanceResults results = doRebalance(false, manager);
+        assertEquals(0, results.getTotalBucketCreatesCompleted());
+        assertEquals(0, results.getTotalPrimaryTransfersCompleted());
+        assertEquals(4, results.getTotalBucketTransfersCompleted());
+        assertTrue(0 < results.getTotalBucketTransferBytes());
+        Set<PartitionRebalanceInfo> detailSet = results.getPartitionRebalanceDetails();
+        assertEquals(1, detailSet.size());
+        PartitionRebalanceInfo details = detailSet.iterator().next();
+        assertEquals(0, details.getBucketCreatesCompleted());
+        assertEquals(0, details.getPrimaryTransfersCompleted());
+        assertTrue(0 < details.getBucketTransferBytes());
+        assertEquals(4, details.getBucketTransfersCompleted());
+
+        Set<PartitionMemberInfo> beforeDetails = details.getPartitionMemberDetailsBefore();
+        // there should have only been 2 members when the rebalancing started.
+        assertEquals(2, beforeDetails.size());
+
+        // if it was done, there should now be 3 members.
+        Set<PartitionMemberInfo> afterDetails = details.getPartitionMemberDetailsAfter();
+        assertEquals(3, afterDetails.size());
+        for (PartitionMemberInfo memberDetails : afterDetails) {
+          assertEquals(2, memberDetails.getBucketCount());
+          assertEquals(2, memberDetails.getPrimaryCount());
+        }
+        verifyStats(manager, results);
+        InternalResourceManager mgr = (InternalResourceManager) manager;
+        ResourceManagerStats stats = mgr.getStats();
+        assertEquals(1, stats.getRebalanceMembershipChanges());
+        return null;
+      }
+    });
+  }
 
   @Test
   public void testMoveBucketsNoRedundancySimulation() {
