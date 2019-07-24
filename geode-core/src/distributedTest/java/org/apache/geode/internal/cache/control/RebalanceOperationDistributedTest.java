@@ -98,8 +98,10 @@ import org.apache.geode.distributed.internal.DistributionMessage;
 import org.apache.geode.distributed.internal.DistributionMessageObserver;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
 import org.apache.geode.internal.cache.BucketRegion;
+import org.apache.geode.internal.cache.CacheLifecycleListener;
 import org.apache.geode.internal.cache.ColocationHelper;
 import org.apache.geode.internal.cache.DiskStoreImpl;
+import org.apache.geode.internal.cache.GemFireCacheImpl;
 import org.apache.geode.internal.cache.InitialImageOperation;
 import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.internal.cache.PRHARedundancyProvider;
@@ -2274,6 +2276,7 @@ public class RebalanceOperationDistributedTest extends CacheTestCase {
     });
 
     server1.invoke(() -> {
+      await().until(() -> getCache().isClosed());
       createPersistentPartitionedRegion(regionName, getUniqueName(), getDiskDirs(),
           redundantCopies);
     });
