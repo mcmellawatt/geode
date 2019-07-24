@@ -2299,6 +2299,8 @@ public class DiskStoreImpl implements DiskStore {
   }
 
   void close(boolean destroy) {
+    logger.info("RYGUY: Closing disk store " + this.name);
+
     this.closing = true;
     getCache().getDiskStoreMonitor().removeDiskStore(this);
 

@@ -1490,6 +1490,7 @@ public class InternalDistributedSystem extends DistributedSystem
     if (!preparingForReconnect) {
       // logger.info("disconnecting IDS@"+System.identityHashCode(this));
       synchronized (reconnectListeners) {
+        logger.info("RYGUY clearing reconnect listeneres");
         reconnectListeners.clear();
       }
       cancelReconnect();
@@ -2560,6 +2561,7 @@ public class InternalDistributedSystem extends DistributedSystem
         int saveNumberOfTries = reconnectAttemptCounter.get();
         try {
           // notify listeners of each attempt and then again after successful
+          System.out.println("RYGUY notifying reconnect listeners");
           notifyReconnectListeners(this, reconnectDS, true);
 
           if (locatorDMTypeForced) {

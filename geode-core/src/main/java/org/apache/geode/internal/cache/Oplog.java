@@ -3890,6 +3890,16 @@ public class Oplog implements CompactableOplog, Flushable {
     if (this.krf.f.exists()) {
       throw new IllegalStateException("krf file " + this.krf.f + " already exists.");
     }
+
+    System.out.println("DELETEING THIS");
+    File file = new File("/Users/rmcmahon/dev/geode/geode-core/dunit/vm0/diskDir/disk0/");
+    if (!file.exists()) {
+      System.out.println("RYAN WE DEAD");
+    }
+    else {
+      Arrays.stream(file.listFiles()).forEach(e -> System.out.println(e));
+    }
+
     this.krf.fos = new FileOutputStream(this.krf.f);
     this.krf.bos = new BufferedOutputStream(this.krf.fos, 32768);
     this.krf.dos = new DataOutputStream(this.krf.bos);
@@ -3964,6 +3974,7 @@ public class Oplog implements CompactableOplog, Flushable {
     }
 
     if (this.krf.f.exists()) {
+      logger.info("RYGUY: Deleting KRF: " + this.krf.f.getAbsolutePath());
       this.krf.f.delete();
     }
   }
@@ -3989,6 +4000,7 @@ public class Oplog implements CompactableOplog, Flushable {
 
       if (this.krf.keyNum == 0) {
         // this is an empty krf file
+        logger.info("RYGUY: Deleting KRF: " + this.krf.f.getAbsolutePath());
         this.krf.f.delete();
         assert this.krf.f.exists() == false;
       } else {

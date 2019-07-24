@@ -681,7 +681,10 @@ public class DiskRegion extends AbstractDiskRegion {
   }
 
   void cleanupFailedInitialization(LocalRegion region) {
-    if (isRecreated() && !this.wasAboutToDestroy() && !this.wasAboutToDestroyDataStorage()) {
+    if (isRecreated()
+        && this.getMyPersistentID() != null
+        && !this.wasAboutToDestroy()
+        && !this.wasAboutToDestroyDataStorage()) {
       close(region, isBucket());
     } else {
       if (this.isBucket() && !this.wasAboutToDestroy()) {
