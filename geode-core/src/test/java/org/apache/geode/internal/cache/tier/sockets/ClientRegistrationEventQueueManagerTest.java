@@ -204,13 +204,4 @@ public class ClientRegistrationEventQueueManagerTest {
 
     verify(internalCacheEvent, times(1)).copyOffHeapToHeap();
   }
-
-  /*
-   * This helps to create contention between registration threads during the drain phase
-   */
-  private static int getRandomNumberOfAdds() {
-    int min = 10_000;
-    int max = 50_000;
-    return ThreadLocalRandom.current().nextInt(min, max + 1);
-  }
 }
