@@ -21,6 +21,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 
 import org.apache.logging.log4j.Logger;
 
+import org.apache.geode.annotations.VisibleForTesting;
 import org.apache.geode.internal.cache.Conflatable;
 import org.apache.geode.internal.cache.EntryEventImpl;
 import org.apache.geode.internal.cache.FilterProfile;
@@ -145,7 +146,7 @@ class ClientRegistrationEventQueueManager {
     }
   }
 
-  public ClientRegistrationEventQueue create(
+  ClientRegistrationEventQueue create(
       final ClientProxyMembershipID clientProxyMembershipID,
       final Queue<ClientRegistrationEvent> eventQueue,
       final ReadWriteLock eventAddDrainLock) {
@@ -253,6 +254,10 @@ class ClientRegistrationEventQueueManager {
     }
   }
 
+  @VisibleForTesting
+  int getRegisteringProxyEventQueuesSize() {
+    return registeringProxyEventQueues.size();
+  }
 
   /**
    * Represents a conflatable and event processed while a client was registering.
