@@ -16,6 +16,7 @@
 package org.apache.geode.internal.cache.tier.sockets;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -43,36 +44,15 @@ import org.apache.geode.internal.cache.LocalRegion;
 
 public class ClientRegistrationEventQueueManagerTest {
   @Test
-  public void messageDeliveredAfterRegisteringOnDrainIfNewFilterIDsIncludesClient()
-      throws ExecutionException, InterruptedException {
+  public void messageDeliveredAfterRegisteringOnDrainIfNewFilterIDsIncludesClient() {
     ClientRegistrationEventQueueManager clientRegistrationEventQueueManager =
         new ClientRegistrationEventQueueManager();
 
     ClientProxyMembershipID clientProxyMembershipID = mock(ClientProxyMembershipID.class);
 
-    ReadWriteLock mockPutDrainLock = mock(ReadWriteLock.class);
-    ReadWriteLock actualPutDrainLock = new ReentrantReadWriteLock();
-
-    CountDownLatch waitForDrainAndRemoveLatch = new CountDownLatch(1);
-    CountDownLatch waitForAddInProgressLatch = new CountDownLatch(1);
-
-    when(mockPutDrainLock.readLock())
-        .thenAnswer(i -> {
-          waitForAddInProgressLatch.countDown();
-          waitForDrainAndRemoveLatch.await();
-          return actualPutDrainLock.readLock();
-        });
-
-    when(mockPutDrainLock.writeLock())
-        .thenAnswer(i -> {
-          waitForAddInProgressLatch.await();
-          waitForDrainAndRemoveLatch.countDown();
-          return actualPutDrainLock.writeLock();
-        });
-
     ClientRegistrationEventQueueManager.ClientRegistrationEventQueue clientRegistrationEventQueue =
         clientRegistrationEventQueueManager.create(clientProxyMembershipID,
-            new ConcurrentLinkedQueue<>(), mockPutDrainLock);
+            new ConcurrentLinkedQueue<>(), new ReentrantReadWriteLock());
 
     InternalCacheEvent internalCacheEvent = mock(InternalCacheEvent.class);
     LocalRegion localRegion = mock(LocalRegion.class);
@@ -97,24 +77,18 @@ public class ClientRegistrationEventQueueManagerTest {
         clientUpdateMessage))
             .thenReturn(recalculatedFilterClientIDs);
     CacheClientProxy cacheClientProxy = mock(CacheClientProxy.class);
+    when(cacheClientProxy.getProxyID()).thenReturn(clientProxyMembershipID);
     when(cacheClientNotifier.getClientProxy(clientProxyMembershipID)).thenReturn(cacheClientProxy);
 
     // Create empty filter client IDs produced by the "normal" put processing path, so we can test
     // that the event is still delivered if the client finished registering and needs the event.
     Set<ClientProxyMembershipID> normalPutFilterClientIDs = new HashSet<>();
-    CompletableFuture<Void> addEventsToQueueTask = CompletableFuture.runAsync(() -> {
-      // In thread one, we add and event to the queue
-      clientRegistrationEventQueueManager
-          .add(internalCacheEvent, clientUpdateMessage, normalPutFilterClientIDs,
-              cacheClientNotifier);
-    });
 
-    CompletableFuture<Void> drainEventsFromQueueTask = CompletableFuture.runAsync(() -> {
-      // In thread two, we drain the event from the queue
-      clientRegistrationEventQueueManager.drain(clientRegistrationEventQueue, cacheClientNotifier);
-    });
+    clientRegistrationEventQueueManager
+        .add(internalCacheEvent, clientUpdateMessage, normalPutFilterClientIDs,
+            cacheClientNotifier);
 
-    CompletableFuture.allOf(addEventsToQueueTask, drainEventsFromQueueTask).get();
+    clientRegistrationEventQueueManager.drain(clientRegistrationEventQueue, cacheClientNotifier);
 
     // The client update message should still be delivered because it is now part of the
     // filter clients interested in this event, despite having not been included in the original
@@ -185,6 +159,8 @@ public class ClientRegistrationEventQueueManagerTest {
     Conflatable conflatable = mock(Conflatable.class);
     Set<ClientProxyMembershipID> filterClientIDs = new HashSet<>();
     CacheClientNotifier cacheClientNotifier = mock(CacheClientNotifier.class);
+    CacheClientProxy cacheClientProxy = mock(CacheClientProxy.class);
+    when(cacheClientNotifier.getClientProxy(clientProxyMembershipID)).thenReturn(cacheClientProxy);
 
     CompletableFuture<Void> addEventsToQueueTask = CompletableFuture.runAsync(() -> {
       for (int numAdds = 0; numAdds < 100000; ++numAdds) {
@@ -202,48 +178,6 @@ public class ClientRegistrationEventQueueManagerTest {
     CompletableFuture.allOf(addEventsToQueueTask, drainEventsFromQueueTask).get();
 
     assertThat(clientRegistrationEventQueue.isEmpty()).isTrue();
-  }
-
-  @Test
-  public void twoThreadsRegisteringSameClientNoEventsLost()
-      throws ExecutionException, InterruptedException {
-    ClientRegistrationEventQueueManager clientRegistrationEventQueueManager =
-        new ClientRegistrationEventQueueManager();
-
-    InternalCacheEvent internalCacheEvent = mock(InternalCacheEvent.class);
-    when(internalCacheEvent.getRegion()).thenReturn(mock(LocalRegion.class));
-    when(internalCacheEvent.getOperation()).thenReturn(mock(Operation.class));
-
-    Conflatable conflatable = mock(Conflatable.class);
-    Set<ClientProxyMembershipID> filterClientIDs = new HashSet<>();
-    CacheClientNotifier cacheClientNotifier = mock(CacheClientNotifier.class);
-    ClientProxyMembershipID clientProxyMembershipID = mock(ClientProxyMembershipID.class);
-
-    ClientRegistrationEventQueueManager.ClientRegistrationEventQueue clientRegistrationEventQueue =
-        clientRegistrationEventQueueManager.create(clientProxyMembershipID,
-            new ConcurrentLinkedQueue<>(), new ReentrantReadWriteLock());
-
-    for (int registrationIterations = 0; registrationIterations < 1000; ++registrationIterations) {
-      Runnable clientRegistrationSimulation = () -> {
-        for (int numAdds = 0; numAdds < getRandomNumberOfAdds(); ++numAdds) {
-          // In thread one, we add events to the queue
-          clientRegistrationEventQueueManager
-              .add(internalCacheEvent, conflatable, filterClientIDs, cacheClientNotifier);
-        }
-        // In thread two, we drain events from the queue
-        clientRegistrationEventQueueManager.drain(clientRegistrationEventQueue,
-            cacheClientNotifier);
-      };
-
-      CompletableFuture<Void> registrationFutureOne =
-          CompletableFuture.runAsync(clientRegistrationSimulation);
-      CompletableFuture<Void> registrationFutureTwo =
-          CompletableFuture.runAsync(clientRegistrationSimulation);
-
-      CompletableFuture.allOf(registrationFutureOne, registrationFutureTwo).get();
-
-      assertThat(clientRegistrationEventQueue.isEmpty()).isTrue();
-    }
   }
 
   @Test
