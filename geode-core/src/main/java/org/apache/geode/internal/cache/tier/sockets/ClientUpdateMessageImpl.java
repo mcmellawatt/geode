@@ -209,6 +209,30 @@ public class ClientUpdateMessageImpl implements ClientUpdateMessage, Sizeable, N
 
   }
 
+  /**
+   * This copy constructor will make a copy of the mutable client interest and CQ collections
+   * in this class to ensure that the caller has isolation when working with these collections.
+   */
+  ClientUpdateMessageImpl(ClientUpdateMessageImpl other) {
+    this._operation = other._operation;
+    this._regionName = other._regionName;
+    this._keyOfInterest = other._keyOfInterest;
+    this._value = other._value;
+    this._valueIsObject = other._valueIsObject;
+    this._callbackArgument = other._callbackArgument;
+    this._membershipId = other._membershipId;
+    this._eventIdentifier = other._eventIdentifier;
+    this._shouldConflate = other._shouldConflate;
+    this._isInterestListPassed = other._isInterestListPassed;
+    this._hasCqs = other._hasCqs;
+    this._clientCqs = new ClientCqConcurrentMap(other._clientCqs);
+    this._clientInterestList = new HashSet<>(other._clientInterestList);
+    this._clientInterestListInv = new HashSet<>(other._clientInterestListInv);
+    this._isNetLoad = other._isNetLoad;
+    this.deltaBytes = other.deltaBytes;
+    this.versionTag = other.versionTag;
+  }
+
   @Override
   public String getRegionName() {
     return this._regionName;
@@ -1455,6 +1479,19 @@ public class ClientUpdateMessageImpl implements ClientUpdateMessage, Sizeable, N
     public ClientCqConcurrentMap() {
       super(16, 1.0f, 1);
     }
+
+    ClientCqConcurrentMap(ClientCqConcurrentMap other) {
+      for (Entry<ClientProxyMembershipID, CqNameToOp> entry : other.entrySet()) {
+        ClientProxyMembershipID clientProxyMembershipID = entry.getKey();
+        if (entry.getValue() instanceof CqNameToOpHashMap) {
+          this.put(clientProxyMembershipID,
+              new CqNameToOpHashMap((CqNameToOpHashMap) entry.getValue()));
+        } else {
+          this.put(clientProxyMembershipID,
+              new CqNameToOpSingleEntry((CqNameToOpSingleEntry) entry.getValue()));
+        }
+      }
+    }
   }
   /**
    * Replaces what used to be a HashMap<String, Integer>.
@@ -1491,6 +1528,11 @@ public class ClientUpdateMessageImpl implements ClientUpdateMessage, Sizeable, N
     public CqNameToOpSingleEntry(String name, Integer op) {
       initializeName(name);
       this.op = op.intValue();
+    }
+
+    CqNameToOpSingleEntry(CqNameToOpSingleEntry other) {
+      this.name = new String[] {other.name[0]};
+      this.op = other.op;
     }
 
     private void initializeName(String name) {
@@ -1557,10 +1599,10 @@ public class ClientUpdateMessageImpl implements ClientUpdateMessage, Sizeable, N
     }
   }
   /**
-   * Basically just a ConcurrentHashMap<String, Integer> but limits itself to the CqNameToOp
+   * Basically just a HashMap<String, Integer> but limits itself to the CqNameToOp
    * interface.
    */
-  public static class CqNameToOpHashMap extends ConcurrentHashMap<String, Integer>
+  public static class CqNameToOpHashMap extends HashMap<String, Integer>
       implements CqNameToOp {
     public CqNameToOpHashMap(int initialCapacity) {
       super(initialCapacity, 1.0f);
@@ -1571,11 +1613,15 @@ public class ClientUpdateMessageImpl implements ClientUpdateMessage, Sizeable, N
       add(se.name[0], se.op);
     }
 
+    CqNameToOpHashMap(CqNameToOpHashMap other) {
+      super(other);
+    }
+
     @Override
     public void sendTo(DataOutput out) throws IOException {
       // When serialized it needs to look just as if writeObject was called on a HASH_MAP
       out.writeByte(DSCODE.HASH_MAP.toByte());
-      DataSerializer.writeConcurrentHashMap(this, out);
+      DataSerializer.writeHashMap(this, out);
     }
 
     @Override
