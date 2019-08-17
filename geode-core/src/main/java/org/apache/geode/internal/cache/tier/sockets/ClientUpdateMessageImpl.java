@@ -1130,39 +1130,7 @@ public class ClientUpdateMessageImpl implements ClientUpdateMessage, Sizeable, N
     }
   }
 
-  /*
-   * private void writeCqInfo(ObjectOutput out) throws IOException { // Write Client CQ Size
-   * out.writeInt(this._clientCqs.size()); // For each client. Iterator entries =
-   * this._clientCqs.entrySet().iterator(); while (entries.hasNext()) { Map.Entry entry =
-   * (Map.Entry)entries.next();
-   *
-   * // Write ProxyId. ClientProxyMembershipID proxyId = (ClientProxyMembershipID)entry.getKey();
-   * proxyId.toData(out);
-   *
-   * HashMap cqs = (HashMap)entry.getValue(); // Write CQ size for each Client.
-   * out.writeInt(cqs.size()); Iterator clients = cqs.entrySet().iterator(); while
-   * (clients.hasNext()) { Map.Entry client = (Map.Entry)clients.next(); // Write CQ Name. String cq
-   * = (String)client.getKey(); out.writeObject(cq); // Write CQ OP. int cqOp =
-   * ((Integer)client.getValue()).intValue(); out.writeInt(cqOp); } } // while }
-   */
-
-  /*
-   * private void readCqInfo(ObjectInput in) throws IOException, ClassNotFoundException { // Read
-   * Client CQ Size int numClientIds = in.readInt(); this._clientCqs = new HashMap();
-   *
-   * // For each Client. for (int cCnt=0; cCnt < numClientIds; cCnt++){ ClientProxyMembershipID
-   * proxyId = new ClientProxyMembershipID();
-   *
-   * // Read Proxy id. proxyId.fromData(in); // read CQ size for each Client. int numCqs =
-   * in.readInt(); HashMap cqs = new HashMap();
-   *
-   * for (int cqCnt=0; cqCnt < numCqs; cqCnt++){ // Get CQ Name and CQ Op. // Read CQ Name. String
-   * cqName = (String)in.readObject(); int cqOp = in.readInt();
-   *
-   * // Read CQ Op. cqs.put(cqName, Integer.valueOf(cqOp)); } this._clientCqs.put(proxyId, cqs); } }
-   */
-
-  public void addClientInterestList(Set clientIds, boolean receiveValues) {
+  void addClientInterestList(Set<ClientProxyMembershipID> clientIds, boolean receiveValues) {
     if (receiveValues) {
       if (this._clientInterestList == null) {
         this._clientInterestList = clientIds;
@@ -1180,23 +1148,16 @@ public class ClientUpdateMessageImpl implements ClientUpdateMessage, Sizeable, N
 
   public void addClientInterestList(ClientProxyMembershipID clientId, boolean receiveValues) {
     // This happens under synchronization on HAContainer.
-    Set<ClientProxyMembershipID> newInterests;
     if (receiveValues) {
       if (this._clientInterestList == null) {
-        newInterests = new ConcurrentHashSet<>();
-      } else {
-        newInterests = new ConcurrentHashSet<>(this._clientInterestList);
+        this._clientInterestList = new ConcurrentHashSet<>();
       }
-      newInterests.add(clientId);
-      this._clientInterestList = newInterests;
+      this._clientInterestList.add(clientId);
     } else {
       if (this._clientInterestListInv == null) {
-        newInterests = new ConcurrentHashSet<>();
-      } else {
-        newInterests = new ConcurrentHashSet<>(this._clientInterestListInv);
+        this._clientInterestListInv = new ConcurrentHashSet<>();
       }
-      newInterests.add(clientId);
-      this._clientInterestListInv = newInterests;
+      this._clientInterestListInv.add(clientId);
     }
   }
 
